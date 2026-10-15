@@ -42,6 +42,7 @@ class Broker:
         self.lock = threading.Lock()
         self.job_thread = None
         self.current_job = None   # live Job; its .cancel is the job's kill switch
+        self.admit_lock = threading.Lock()  # serializes admission (P1 race fix)
         self.pending = None       # params awaiting confirmation
 
     def subscribe(self):
@@ -99,20 +100,26 @@ class Job:
         screening = p.get("screening", "skip")
         broker.emit("stage", {"stage": "starting", "screening": screening})
 
+        p, t = engine.dnslib.selftest()
+        if p != t:
+            broker.emit("job_error", {"error": f"dnslib selftest failed {p}/{t}"})
+            return
+        have_pool = engine.load_pool() is not None
         if screening in ("fresh", "auto"):
-            have_pool = engine.load_pool() is not None
             if screening == "fresh" or not have_pool:
                 broker.emit("stage", {"stage": "discovery",
                                       "mode": screening})
                 pool, run_dir = engine.run_discovery(screening, on_progress,
                                                      self.cancel)
-                if self.cancel.is_set():
+                if pool is None or self.cancel.is_set():
                     broker.emit("cancelled", {})
                     return
+                # use the pool this job generated, wherever it lives: in an
+                # auto bootstrap the main datasets/pool.json may not exist yet
                 broker.emit("pool_updated",
                             {"meta": pool["meta"],
                              "run_dir": os.path.basename(run_dir)})
-                pool_path = os.path.join(engine.DATASETS, "pool.json")
+                pool_path = os.path.join(run_dir, "pool.json")
             else:
                 broker.emit("stage", {"stage": "discovery_skipped"})
                 pool_path = os.path.join(engine.DATASETS, "pool.json")
@@ -136,7 +143,8 @@ class Job:
             "n_ranked": ranked["n_ranked"],
             "incomplete": ranked.get("incomplete_cached", []),
             "top10": [{"ip": r["ip"], "u_med": r["u_med"], "c_med": r["c_med"],
-                       "ptr": r.get("ptr"), "category": r.get("category")}
+                       "ptr": r.get("ptr"),
+                       "category": engine.relabel_category(r["ip"], r.get("category"))}
                       for r in ranked["ranked"][:10]]})
 
 
@@ -154,19 +162,47 @@ def needs_confirmation(params):
     return needs
 
 
+def validate_params(p):
+    """Server-side range validation; returns error string or None.
+
+    Runs before confirmation or job creation so a bad parameter can never
+    reach the engine (e.g. negative n would slice pool[:-k] = almost the
+    entire pool).
+    """
+    try:
+        n = int(p.get("n", DEFAULT_N))
+        workers = int(p.get("workers", 60))
+        timeout = float(p.get("timeout_s", 2.0))
+    except (TypeError, ValueError):
+        return "n, workers, timeout_s must be numeric"
+    if not 1 <= n <= MAX_N:
+        return f"n out of range 1..{MAX_N}"
+    if not 1 <= workers <= 128:
+        return "workers out of range 1..128"
+    if not 0.05 <= timeout <= 10.0:
+        return "timeout_s out of range 0.05..10"
+    if p.get("screening", "skip") not in ("skip", "auto", "fresh"):
+        return "screening must be skip|auto|fresh"
+    return None
+
+
 def start_job(params):
     """Returns ('started',None) | ('confirm',needs) | (None,error)."""
-    if broker.job_thread and broker.job_thread.is_alive():
-        return None, "job already running"
-    needs = needs_confirmation(params)
-    if needs and not params.get("confirmed"):
-        broker.pending = params
-        return "confirm", needs
-    broker.pending = None
-    job = Job(params)
-    broker.current_job = job
-    broker.job_thread = threading.Thread(target=job.run, daemon=True)
-    broker.job_thread.start()
+    err = validate_params(params)
+    if err:
+        return None, err
+    with broker.admit_lock:  # admission + job assignment are atomic
+        if broker.job_thread and broker.job_thread.is_alive():
+            return None, "job already running"
+        needs = needs_confirmation(params)
+        if needs and not params.get("confirmed"):
+            broker.pending = params
+            return "confirm", needs
+        broker.pending = None
+        job = Job(params)
+        broker.current_job = job
+        broker.job_thread = threading.Thread(target=job.run, daemon=True)
+        broker.job_thread.start()
     return "started", None
 
 
@@ -352,9 +388,12 @@ def api_run(ts):
     if not os.path.exists(rp):
         return {"error": "no such run"}
     try:
-        return json.load(open(rp))
+        r = json.load(open(rp))
     except ValueError:
         return {"error": "corrupt ranked.json"}
+    for row in r.get("ranked", []):
+        row["category"] = engine.relabel_category(row["ip"], row.get("category"))
+    return r
 
 
 def api_compare(ts_a, ts_b):
@@ -372,7 +411,7 @@ def api_compare(ts_a, ts_b):
     def cats(rs):
         c = {}
         for r in rs[:50]:
-            k = r.get("category", "?")
+            k = engine.relabel_category(r["ip"], r.get("category"))
             c[k] = c.get(k, 0) + 1
         return c
     refs = {}

@@ -5,6 +5,7 @@
 const $ = (id) => document.getElementById(id);
 const state = {
   running: false,
+  pendingConfirm: false,
   points: null,          // {cat_names, points}
   wasm: null,            // {exports, memory, ingestBuf, layoutBuf, paletteBuf}
   latestRun: null,
@@ -37,8 +38,18 @@ function connectEvents() {
 
 function setStatus(t) { $("status-text").textContent = t; }
 
+function renderRunStats(d) {
+  // header stat chips: candidates, pool size, runs stored
+  const parts = [];
+  if (d.n_candidates) parts.push(`${d.n_candidates.toLocaleString()} candidates`);
+  if (d.pool && d.pool.eligible) parts.push(`pool ${d.pool.eligible.toLocaleString()}`);
+  if (d.n_runs) parts.push(`${d.n_runs} runs stored`);
+  $("run-stats").textContent = parts.join(" · ");
+}
+
 function onState(d) {
   state.running = d.running;
+  if ("pending_confirm" in d) state.pendingConfirm = d.pending_confirm;
   renderRunStats(d);
   setControls();
 }
@@ -102,8 +113,13 @@ function onJobDone() {
 }
 
 /* ---------- controls ---------- */
+async function refreshState() {
+  onState(await (await fetch("/api/state")).json());
+}
+
 function setControls() {
-  $("btn-run").disabled = state.running;
+  const busy = state.running || state.pendingConfirm;
+  $("btn-run").disabled = busy;
   $("btn-cancel").disabled = !state.running;
 }
 
@@ -120,24 +136,40 @@ $("run-form").addEventListener("submit", (e) => {
     if (r.confirm_required) {
       $("confirm-reason").textContent = "Large operation: " + r.confirm_required.join(" · ");
       $("confirm-box").hidden = false;
+      state.pendingConfirm = true;   // awaiting confirmation, not running
+      state.running = false;
     } else if (r.error) {
       onJobError({ error: r.error });
+      state.pendingConfirm = false;
+    } else {
+      state.pendingConfirm = false;
+      state.running = true;
     }
+    setControls();
   });
-  state.running = true;
-  setControls();
 });
 
 $("btn-cancel").addEventListener("click", () => api("/api/cancel", {}));
-$("btn-confirm-yes").addEventListener("click", () => {
+
+$("btn-confirm-yes").addEventListener("click", async () => {
   $("confirm-box").hidden = true;
-  api("/api/confirm", { confirmed: true });
-  state.running = true;
+  const r = await api("/api/confirm", { confirmed: true });
+  if (r.error) {
+    onJobError({ error: r.error });
+    state.pendingConfirm = false;
+  } else {
+    state.pendingConfirm = false;
+    state.running = true;
+  }
   setControls();
 });
-$("btn-confirm-no").addEventListener("click", () => {
+
+$("btn-confirm-no").addEventListener("click", async () => {
   $("confirm-box").hidden = true;
-  api("/api/confirm", { confirmed: false });
+  await api("/api/confirm", { confirmed: false });
+  state.pendingConfirm = false;      // decline resets controls (P2 fix)
+  await refreshState();
+  setControls();
 });
 
 async function api(path, body) {
@@ -233,7 +265,10 @@ $("btn-compare").addEventListener("click", async () => {
   if (!a || !b) return;
   const d = await (await fetch(`/api/compare/${a}/${b}`)).json();
   if (d.error) { $("compare-result").textContent = d.error; return; }
-  let html = `<p>top-50 overlap: <b>${d.overlap}/50</b></p>`;
+  // denominator = the smaller run's compared population (top-50 window),
+  // not a hardcoded 50: two 14-resolver runs share 14/14, not 14/50
+  const denom = Math.min(50, d.n_a ?? 50, d.n_b ?? 50);
+  let html = `<p>top-${denom} overlap: <b>${d.overlap}/${denom}</b></p>`;
   html += "<table><thead><tr><th>Ref</th><th>A rank/u_med</th><th>B rank/u_med</th></tr></thead><tbody>";
   for (const [ip, v] of Object.entries(d.refs || {})) {
     html += `<tr><td class="ip">${ip}</td><td>#${v.a.rank}, ${v.a.u_med}ms</td><td>#${v.b.rank}, ${v.b.u_med}ms</td></tr>`;
@@ -355,6 +390,10 @@ function ingestPoints() {
   }
   ex.viz_ingest(ingestPtr, n, changedPtr);
   const changed = new Int32Array(ex.memory.buffer, changedPtr, 1)[0];
+  // scratch fully consumed by viz_ingest: rewind the arena so repeated
+  // re-ingests (live updates, run refresh) reuse the same blocks instead of
+  // growing wasm memory every call
+  ex.viz_scratch_reset();
   $("viz-meta").textContent = `${n.toLocaleString()} points · ${changed.toLocaleString()} changed`;
   $("viz-meta").dataset.count = n;
 }
@@ -404,6 +443,7 @@ function vizLivenessTick(done, alive) {
 }
 
 function vizFlashRun() {
+  flushVizUpdates(); // deliver stragglers below the 8-event threshold too
   ingestPoints(); // refresh from latest datasets (includes completed run data)
 }
 

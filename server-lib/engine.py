@@ -13,6 +13,7 @@ Isolation guarantees (per user directive: preserve the validated engine):
 import io
 import json
 import os
+import re
 import shutil
 import statistics
 import sys
@@ -44,17 +45,17 @@ class Tee(io.TextIOBase):
         line = s.strip()
         if not line:
             return len(s)
-        parts = line.split()
-        try:
-            if line.startswith("liveness ") and parts[1].isdigit():
-                done, total = parts[1].split("/")
-                alive = int(parts[2].split("=")[1])
-                self.on_progress("liveness", int(done), int(total), alive)
-            elif line.startswith("screening ") and parts[1].isdigit():
-                done, total = parts[1].split("/")
-                self.on_progress("screening", int(done), int(total), None)
-        except (IndexError, ValueError):
-            pass
+        m = re.match(r"^(?:liveness|screening) (\d+)/(\d+)(?:\s|$)", line)
+        if m:
+            done, total = int(m.group(1)), int(m.group(2))
+            if line.startswith("liveness"):
+                alive = None
+                am = re.search(r"alive=(\d+)", line)
+                if am:
+                    alive = int(am.group(1))
+                self.on_progress("liveness", done, total, alive)
+            else:
+                self.on_progress("screening", done, total, None)
         return len(s)
 
     def flush(self):
@@ -86,6 +87,11 @@ def ensure_datasets():
 def new_run_dir():
     ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     d = os.path.join(RUNS, ts)
+    if os.path.exists(d):  # collision protection beyond one-second timestamps
+        k = 2
+        while os.path.exists(f"{d}-{k}"):
+            k += 1
+        d, ts = f"{d}-{k}", f"{ts}-{k}"
     os.makedirs(d, exist_ok=True)
     return d, ts
 
@@ -177,10 +183,15 @@ def run_discovery(mode, on_progress, cancel_event):
             if os.path.exists(src) and not os.path.exists(name):
                 os.symlink(src, name)
         discover.screening()
+        if cancel_event.is_set():
+            # Cancelled during screening: emit nothing, promote nothing.
+            return None, run_dir
         _emit_pool_from_screening(run_dir, on_progress)
-        if mode == "fresh":
-            # promote fresh pool + screening results to datasets/ (additive update,
-            # old files preserved by timestamp inside run_dir)
+        main_pool = os.path.join(DATASETS, "pool.json")
+        if mode == "fresh" or not os.path.exists(main_pool):
+            # fresh: always promote (additive update, old files preserved by
+            # timestamp inside run_dir). auto: promote only when bootstrapping
+            # a missing main pool, so auto refreshes never clobber dataset state.
             for name in ("pool.json", "phase2b-results.jsonl",
                          "phase2b-perquery.jsonl"):
                 if os.path.exists(name):
@@ -359,3 +370,16 @@ def categorize(ip):
         if any(ip.startswith(p) for p in prefixes):
             return name
     return "Other"
+
+
+def relabel_category(ip, category):
+    """Rankings store PTR-derived categories from measure.rank; PTR strings
+    like 'one.one.one.one' land in 'other:*' even when the IP is a known
+    provider (1.0.0.1 -> Cloudflare). Prefer the IP-range category whenever
+    it identifies a known provider, so rankings, providers table and the
+    field agree. Unknown stays 'other:<ptr>' (honest, no invention)."""
+    if not category or category.startswith("other"):
+        known = categorize(ip)
+        if known != "Other":
+            return known
+    return category or "Other"

@@ -265,7 +265,15 @@ td.bad { color: var(--bad); }
 }
 .run-picker select { width: auto; min-width: 180px; }
 
-.compare-result { font-family: var(--mono); font-size: 11px; color: var(--text); }
+/* history card is in the narrow left column: stack A / B / Compare so the
+   selectors and button can't overflow past the card edge (they were pushed
+   out of view at 340px, B and Compare unreachable by pointer) */
+#history-section .run-picker { flex-wrap: wrap; gap: 8px; }
+#history-section .run-picker label { display: block; width: 100%; }
+#history-section select { width: 100%; max-width: 100%; box-sizing: border-box; min-width: 0; }
+#history-section #btn-compare { width: 100%; }
+
+.compare-result { font-family: var(--mono); font-size: 11px; color: var(--text); overflow-x: auto; }
 .compare-result table { margin-top: 8px; }
 
 #statusline {
