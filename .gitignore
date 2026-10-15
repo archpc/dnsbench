@@ -1,0 +1,6 @@
+# Benchmark datasets and run history live OUTSIDE the repo, by design.
+datasets/
+
+__pycache__/
+*.pyc
+viz/target/
