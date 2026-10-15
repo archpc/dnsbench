@@ -12,9 +12,13 @@ a 39 KB custom Rust->wasm renderer. No frameworks, no dependencies.
                             engine; imports the validated dns-benchmark skill
                             scripts (dnslib/discover/measure/stability) as-is,
                             never mutates them
-    static/                 index.html / app.js / styles.css / viz.wasm (prebuilt)
-    viz/                    Rust source for the WASM renderer (see viz/README.md)
-    tests/verify_dnsbench.py  automated end-to-end verification suite (32 checks)
+    static/                 index.html / app.js / styles.css — no frameworks;
+                            rankings bar chart, resolver detail, explore
+                            scatter, across-runs history, coverage summary
+    viz/                    Rust WASM point-field renderer (UNSUSED since the
+                            chart redesign; kept for history)
+    tests/verify_dnsbench.py  automated end-to-end verification suite (32 checks;
+                            launches real jobs — run only when a benchmark is wanted)
     datasets/               benchmark datasets + run history — NOT in this repo
                             (kept separate from application source; .gitignored)
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DNSBench — Resolver Field Diagnostics</title>
+<title>DNSBench — Resolver Diagnostics</title>
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -15,65 +15,96 @@
 </header>
 
 <main>
-  <section id="controls" class="panel">
-    <h2>Run Control</h2>
-    <form id="run-form">
-      <label>Resolvers <input id="f-n" type="number" min="5" max="150" value="25"></label>
-      <label>Workers <input id="f-workers" type="number" min="1" max="128" value="60"></label>
-      <label>Timeout (s) <input id="f-timeout" type="number" min="0.5" max="5" step="0.5" value="2"></label>
-      <label>Screening
-        <select id="f-screening">
-          <option value="skip">skip (use existing pool)</option>
-          <option value="auto">auto (screen if no pool)</option>
-          <option value="fresh">fresh (re-screen)</option>
-        </select>
-      </label>
-      <button id="btn-run" type="submit">Run</button>
-      <button id="btn-cancel" type="button" disabled>Cancel</button>
-    </form>
-    <div id="progress-wrap" class="progress-wrap" hidden>
-      <div id="progress-bar"></div>
-      <span id="progress-label"></span>
-    </div>
-    <div id="confirm-box" class="confirm-box" hidden>
-      <p id="confirm-reason"></p>
-      <button id="btn-confirm-yes">Confirm</button>
-      <button id="btn-confirm-no">Abort</button>
-    </div>
-    <div id="job-error" class="job-error" hidden></div>
-  </section>
+  <div class="left-col">
+    <section id="controls" class="panel">
+      <h2>Run Control</h2>
+      <form id="run-form">
+        <label>Resolvers <input id="f-n" type="number" min="1" max="150" value="25"></label>
+        <label>Screening
+          <select id="f-screening">
+            <option value="skip">skip (use existing pool)</option>
+            <option value="auto">auto (screen if no pool)</option>
+            <option value="fresh">fresh (re-screen)</option>
+          </select>
+        </label>
+        <details id="advanced">
+          <summary>Advanced (workers, timeout)</summary>
+          <label>Workers <input id="f-workers" type="number" min="1" max="128" value="60"></label>
+          <label>Timeout (s) <input id="f-timeout" type="number" min="0.5" max="5" step="0.5" value="2"></label>
+        </details>
+        <div class="btn-row">
+          <button id="btn-run" type="submit">Run</button>
+          <button id="btn-cancel" type="button" disabled>Cancel</button>
+        </div>
+      </form>
+      <div id="progress-wrap" class="progress-wrap" hidden>
+        <div id="progress-bar"></div>
+        <span id="progress-label"></span>
+      </div>
+      <div id="confirm-box" class="confirm-box" hidden>
+        <p id="confirm-reason"></p>
+        <button id="btn-confirm-yes">Confirm</button>
+        <button id="btn-confirm-no">Abort</button>
+      </div>
+      <div id="job-error" class="job-error" hidden></div>
+    </section>
 
-  <section id="viz-section" class="panel">
-    <h2>Resolver Field <span id="viz-meta" class="muted"></span></h2>
-    <canvas id="viz-canvas"></canvas>
-    <div id="viz-legend" class="legend"></div>
-  </section>
+    <section id="coverage" class="panel">
+      <h2>Candidate Coverage <span class="scope-tag" title="Liveness + screening experiment — distinct from the deep-bench runs">screening</span></h2>
+      <div id="coverage-stats" class="coverage-stats">loading…</div>
+      <p class="note">Screening (liveness + probe) is a separate experiment from the deep-bench runs; these counts are not run results.</p>
+    </section>
 
-  <section id="rank-section" class="panel">
-    <h2>Rankings</h2>
+    <section id="history-section" class="panel">
+      <h2>History <span class="scope-tag" title="Compare two stored runs">compare runs</span></h2>
+      <div class="run-picker">
+        <label>A <select id="hist-a"></select></label>
+        <label>B <select id="hist-b"></select></label>
+        <button id="btn-compare" type="button">Compare</button>
+      </div>
+      <div id="compare-result" class="compare-result"></div>
+    </section>
+  </div>
+
+  <section id="rankings" class="panel">
+    <h2>Rankings <span class="scope-tag" title="Deep-bench measurement of the selected run">deep bench</span></h2>
     <div class="run-picker">
-      <label>Run
-        <select id="run-select"><option value="">— latest —</option></select>
-      </label>
+      <label>Run <select id="run-select"><option value="">— latest —</option></select></label>
       <span id="run-badge" class="muted"></span>
     </div>
+    <div id="run-meta" class="run-meta"></div>
+    <div id="bar-chart" role="listbox" aria-label="Top ranked resolvers, latency bars in milliseconds"></div>
+    <div id="bar-axis" class="bar-axis" aria-hidden="true"></div>
+    <div id="refs-strip">
+      <h3>Mandatory reference resolvers <span class="muted">(measured in every run)</span></h3>
+      <div id="refs-rows"></div>
+    </div>
     <table id="rank-table">
-      <thead><tr><th>#</th><th>IP</th><th>u_med</th><th>c_med</th><th>toU</th><th>toC</th><th>badC</th><th>Provider</th></tr></thead>
+      <thead><tr><th>#</th><th>IP</th><th>u_med ms</th><th>c_med ms</th><th>to_u</th><th>to_c</th><th>bad_c</th><th>Provider (PTR)</th></tr></thead>
       <tbody></tbody>
     </table>
   </section>
 
-  <section id="history-section" class="panel">
-    <h2>History</h2>
-    <div class="run-picker">
-      <label>A <select id="hist-a"></select></label>
-      <label>B <select id="hist-b"></select></label>
-      <button id="btn-compare" type="button">Compare</button>
-    </div>
-    <div id="compare-result" class="compare-result"></div>
+  <section id="detail" class="panel">
+    <h2>Resolver Detail</h2>
+    <div id="detail-body" class="detail-body"><p class="note">Select a resolver to see its measurements.</p></div>
   </section>
 
-  <section id="providers-section" class="panel">
+  <section id="explore" class="panel">
+    <h2>Explore <span class="scope-tag" title="Deep-bench results of the selected run">deep bench</span></h2>
+    <div id="explore-filters" class="explore-filters"></div>
+    <div class="chart-wrap"><svg id="explore-svg" viewBox="0 0 640 400" role="img" aria-label="Scatterplot: uncached median versus cached median in milliseconds; lower-left is faster in both"></svg></div>
+    <p class="note">Lower-left = faster in both modes. Endpoints without a plottable median are counted below, not drawn.</p>
+    <p class="note" id="explore-note"></p>
+  </section>
+
+  <section id="across" class="panel">
+    <h2>Across Runs <span class="scope-tag" title="The selected resolver in every stored run">deep bench</span></h2>
+    <div class="chart-wrap"><svg id="across-svg" viewBox="0 0 640 300" role="img" aria-label="Selected resolver latency across stored runs, with reference resolvers"></svg></div>
+    <p class="note">Gaps mean the run did not measure this resolver. Runs bench different candidate populations — compare within a run; treat cross-run movement as indicative only.</p>
+  </section>
+
+  <section id="providers" class="panel">
     <h2>Providers</h2>
     <table id="provider-table">
       <thead><tr><th>Provider</th><th>Count</th><th>Best u_med</th><th>Median u_med</th></tr></thead>

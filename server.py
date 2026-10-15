@@ -12,11 +12,12 @@ Architecture (per approved design):
 import json
 import os
 import queue
+import re
 import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(APP_DIR, "static")
@@ -258,6 +259,10 @@ class Handler(BaseHTTPRequestHandler):
             self._json(api_datasets())
         elif path == "/api/runs":
             self._json(api_runs())
+        elif path.startswith("/api/runs/") and "/queries/" in path:
+            _, _, rest = path.partition("/api/runs/")
+            ts, _, ip = rest.partition("/queries/")
+            self._json(api_queries(ts, ip))
         elif path.startswith("/api/runs/"):
             ts = urlparse(self.path).path.rsplit("/", 1)[-1]
             self._json(api_run(ts))
@@ -267,6 +272,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(api_compare(parts[3], parts[4]))
             else:
                 self.send_error(404)
+        elif path == "/api/coverage":
+            self._json(api_coverage())
+        elif path == "/api/history":
+            qs = urlparse(self.path).query
+            ip = (parse_qs(qs).get("ip") or [""])[0]
+            self._json(api_history(ip))
         else:
             self.send_error(404)
 
@@ -350,6 +361,100 @@ def api_state():
             "n_runs": len(runs),
             "confirm_threshold": CONFIRM_THRESHOLD,
             "pending_confirm": bool(broker.pending)}
+
+
+def api_coverage():
+    """Screening-side candidate coverage summary (distinct from deep-bench
+    runs): status counts over the master candidate list."""
+    _, pts = engine.points_payload()
+    c = {"unknown": 0, "alive": 0, "dead": 0, "hijack": 0}
+    for x in pts:
+        c[("unknown", "alive", "dead", "hijack")[x[2]]] += 1
+    c["total"] = len(pts)
+    pool = engine.load_pool()
+    if pool:
+        c["pool_eligible"] = pool["meta"].get("eligible")
+        c["pool_generated"] = pool["meta"].get("generated")
+    return c
+
+
+IP_RE = re.compile(r"^(?:\d{1,2}|1\d{2}|2[0-4]\d|25[0-5])(?:\.(?:\d{1,2}|1\d{2}|2[0-4]\d|25[0-5])){3}$")
+
+
+def api_queries(ts, ip):
+    """Per-resolver raw samples from an existing run's per-query audit log.
+    Read-only summarization of data measure.py already wrote."""
+    if not IP_RE.match(ip or ""):
+        return {"error": "invalid ip"}
+    pf = os.path.join(engine.RUNS, ts, "deepbench-perquery.jsonl")
+    if not os.path.exists(pf):
+        return {"error": "no per-query log for this run"}
+    out = {"ip": ip,
+           "uncached": {"ok": [], "timeouts": 0, "invalid": 0},
+           "cached": {"ok": [], "timeouts": 0, "invalid": 0},
+           "prime": {"ok": [], "timeouts": 0, "invalid": 0},
+           "liveness": None}
+    try:
+        with open(pf) as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                if d.get("ip") != ip:
+                    continue
+                k = d.get("kind")
+                rc, an, ms = d.get("rcode"), d.get("an"), d.get("ms")
+                if k == "liveness":
+                    out["liveness"] = {"ms": ms, "rcode": rc, "an": an}
+                    continue
+                b = out.get(k)
+                if b is None:
+                    continue
+                if rc == -2:
+                    b["timeouts"] += 1
+                elif k == "uncached" or (rc == 0 and an > 0):
+                    b["ok"].append(ms)
+                else:
+                    b["invalid"] += 1
+    except OSError as e:
+        return {"error": f"unreadable per-query log: {e}"}
+    return out
+
+
+def api_history(ip):
+    """Selected resolver's measurements across ALL stored runs, plus the
+    mandatory references as context. Runs with different candidate
+    populations are labeled as-is; absence is explicit null, never zero."""
+    if not IP_RE.match(ip or ""):
+        return {"error": "invalid ip"}
+    runs = []
+    refs = {r: [] for r in engine.measure.FORCED_REFS}
+    if os.path.isdir(engine.RUNS):
+        for ts in sorted(os.listdir(engine.RUNS)):
+            rp = os.path.join(engine.RUNS, ts, "ranked.json")
+            if not os.path.exists(rp):
+                continue  # partial/cancelled runs excluded
+            try:
+                r = json.load(open(rp))
+            except ValueError:
+                continue
+            ranked = r.get("ranked", [])
+            me = None
+            rank = None
+            for i, row in enumerate(ranked, 1):
+                if row["ip"] == ip:
+                    me = {"u_med": row.get("u_med"), "c_med": row.get("c_med"),
+                          "u_p90": row.get("u_p90"), "to_u": row.get("to_u"),
+                          "to_c": row.get("to_c"), "bad_c": row.get("bad_c")}
+                    rank = i
+                    break
+            runs.append({"ts": ts, "generated": r.get("generated"),
+                         "n_ranked": r.get("n_ranked"), "me": me, "rank": rank})
+            for ref in refs:
+                row = next((x for x in ranked if x["ip"] == ref), None)
+                refs[ref].append({"u_med": row.get("u_med")} if row else None)
+    return {"ip": ip, "runs": runs, "refs": refs}
 
 
 def api_datasets():

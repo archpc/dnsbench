@@ -1,6 +1,9 @@
 # Benchmark datasets and run history live OUTSIDE the repo, by design.
 datasets/
 
+# UI verification screenshots (not part of the app)
+.hermes-ui-verify/
+
 __pycache__/
 *.pyc
 viz/target/
