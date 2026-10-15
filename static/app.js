@@ -25,7 +25,14 @@ const CAT_COLORS = {
   AdGuard: "#ff6384", CleanBrowsing: "#4fd1c5", Verisign: "#818cf8",
   MagicDNS: "#34d399", Other: "#6e7887",
 };
-const catColor = (c) => CAT_COLORS[c] || CAT_COLORS.Other;
+const catColor = (c) => {
+  if (CAT_COLORS[c]) return CAT_COLORS[c];
+  if (!c) return CAT_COLORS.Other;
+  // deterministic distinguishable hue for providers outside the catalog
+  let h = 0;
+  for (const ch of c) h = (h * 31 + ch.charCodeAt(0)) % 997;
+  return `hsl(${Math.round(h * 137.508) % 360}, 55%, 62%)`;
+};
 
 const fmtMs = (v) => (v == null ? "—" : `${v} ms`);
 
@@ -217,7 +224,7 @@ async function loadRunList() {
     for (const s of [sel, ha, hb]) {
       const o = document.createElement("option");
       o.value = r.ts;
-      o.textContent = `${r.ts} (${r.n_ranked} ranked${r.incomplete ? ", " + r.incomplete + " flagged" : ""})`;
+      o.textContent = `${r.ts} (${r.n_ranked}r${r.incomplete ? ", " + r.incomplete + "⚠" : ""})`;
       s.appendChild(o);
     }
   }
@@ -290,10 +297,9 @@ function barRow(row, rank, incompleteSet, isRef) {
     `<span class="bar-rank">${isRef ? "ref" : rank}</span>` +
     `<span class="bar-ip" title="${esc(row.ptr || "")}">${row.ip}</span>` +
     `<div class="bar-track">` +
-    `<div class="bar u" style="width:${u == null ? 0 : (u / state.barMax * 100).toFixed(2)}%">` +
-    `<span class="bar-val">${u == null ? "no valid samples" : u}</span></div>` +
-    `<div class="bar c" style="width:${c == null ? 0 : (c / state.barMax * 100).toFixed(2)}%">` +
-    `<span class="bar-val">${c == null ? "no valid samples" : c}</span></div></div>` +
+    `<div class="bar u" style="width:${u == null ? 0 : (u / state.barMax * 100).toFixed(2)}%" title="uncached median: ${u == null ? "no valid samples" : u + " ms"}"></div>` +
+    `<div class="bar c" style="width:${c == null ? 0 : (c / state.barMax * 100).toFixed(2)}%" title="cached median: ${c == null ? "no valid samples" : c + " ms"}"></div></div>` +
+    `<span class="bar-vals"><b>${u == null ? "—" : u.toFixed(1)}</b><i>${c == null ? "—" : c.toFixed(1)}</i></span>` +
     `<span class="bar-flags">${flagsFor(row, incompleteSet)}</span>`;
   div.addEventListener("click", () => selectResolver(row.ip));
   div.addEventListener("keydown", (e) => {
@@ -348,13 +354,13 @@ function renderTable() {
     tr.setAttribute("aria-label", `rank ${i + 1}, ${row.ip}`);
     const isRef = REFS.includes(row.ip);
     tr.innerHTML =
-      `<td>${i + 1}${isRef ? ' <span class="ref-badge">ref</span>' : ""}</td>` +
+      `<td>${i + 1}${isRef ? ' <span class="ref-badge">ref</span>' : ""}${incSet.has(row.ip) ? ' <span class="flag bad" title="incomplete cached samples">⚠</span>' : ""}</td>` +
       `<td class="ip">${row.ip}</td>` +
-      `<td>${row.u_med ?? "—"}</td><td>${row.c_med ?? "—"}</td>` +
+      `<td>${row.u_med == null ? "—" : row.u_med.toFixed(1)}</td><td>${row.c_med == null ? "—" : row.c_med.toFixed(1)}</td>` +
       `<td class="${row.to_u ? "warn" : ""}">${row.to_u || 0}</td>` +
       `<td class="${row.to_c ? "warn" : ""}">${row.to_c || 0}</td>` +
       `<td class="${row.bad_c ? "warn" : ""}">${row.bad_c || 0}</td>` +
-      `<td class="provider" title="${esc(row.ptr || "")}">${esc(row.category || row.ptr || "?")}${flagsFor(row, incSet)}</td>`;
+      `<td class="provider" title="${esc(row.ptr || "")}">${esc(row.category || row.ptr || "?")}</td>`;
     tr.addEventListener("click", () => selectResolver(row.ip));
     tr.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectResolver(row.ip); }
@@ -466,23 +472,37 @@ async function renderDetail() {
     (uOk ? `<tr><td>Uncached samples recorded</td><td>${uOk.ok.length} valid + ${uOk.timeouts} timed out</td></tr>` : "") +
     (cOk ? `<tr><td>Cached samples recorded</td><td>${cOk.ok.length} valid + ${cOk.timeouts} timed out + ${cOk.invalid} invalid</td></tr>` : "") +
     `</tbody></table>` +
-    (q && !q.error ? distStrip("Uncached samples", uOk) + distStrip("Cached samples", cOk)
+    (q && !q.error ? distStrip("Uncached samples", uOk, distMax(q, uOk, cOk))
+      + distStrip("Cached samples", cOk, distMax(q, uOk, cOk))
       : '<p class="note bad-note">no per-query sample log for this run — distribution unavailable, medians above are as stored</p>') +
     `<details class="help"><summary>What these metrics mean</summary>${helpList()}</details>`;
 }
 
-function distStrip(label, b) {
+function distMax(q, a, b) {
+  // one shared scale for both strips so they're comparable
+  const all = [...(a?.ok || []), ...(b?.ok || [])];
+  return Math.max(...all, 1);
+}
+
+function distStrip(label, b, maxMs) {
   if (!b) return "";
   const vals = b.ok.filter((v) => v != null);
-  const max = Math.max(...vals, 1);
-  const dots = vals.map((v) =>
-    `<i class="dot" style="left:${(v / max * 100).toFixed(1)}%" title="${v} ms"></i>`).join("");
+  // histogram bins: 50 near-identical samples would overdraw as one blob
+  const BINS = 24;
+  const counts = new Array(BINS).fill(0);
+  for (const v of vals) {
+    const bi = Math.min(BINS - 1, Math.max(0, Math.floor(v / maxMs * BINS)));
+    counts[bi]++;
+  }
+  const peak = Math.max(...counts, 1);
+  const bars = counts.map((c, i) => c ? `<i class="bin" style="left:${(i / BINS * 100).toFixed(2)}%;width:${(100 / BINS - 0.6).toFixed(2)}%;height:${Math.max(15, c / peak * 100).toFixed(0)}%" title="${c} sample${c > 1 ? "s" : ""} in ${(i * maxMs / BINS).toFixed(0)}–${((i + 1) * maxMs / BINS).toFixed(0)} ms"></i>` : "").join("");
   const extras = [];
   if (b.timeouts) extras.push(`<span class="flag warn">⏱ ${b.timeouts} timed out</span>`);
   if (b.invalid) extras.push(`<span class="flag warn">✗ ${b.invalid} invalid</span>`);
   return `<div class="dist"><div class="dist-label">${label} ` +
     `<span class="muted">(${vals.length} valid)</span></div>` +
-    `<div class="dist-track">${dots}</div>` +
+    `<div class="dist-track">${bars}</div>` +
+    `<div class="dist-scale"><span>0 ms</span><span>${maxMs} ms</span></div>` +
     `<div class="dist-extra">${extras.join(" ") || '<span class="muted">all ' + vals.length + ' samples valid</span>'}</div></div>`;
 }
 
@@ -580,7 +600,7 @@ async function renderAcross() {
   const labelEvery = Math.max(1, Math.ceil(n / 6));
   runs.forEach((r, i) => {
     if (i % labelEvery === 0 || i === n - 1) {
-      s += `<text x="${px(i)}" y="${H - M.b + 14}" class="tick" text-anchor="middle" transform="rotate(-38 ${px(i)} ${H - M.b + 14})">${r.ts.slice(0, 15)}</text>`;
+      s += `<text x="${px(i)}" y="${H - M.b + 14}" class="tick" text-anchor="end" transform="rotate(-38 ${px(i)} ${H - M.b + 14})">${r.ts.slice(9, 15)}</text>`;
     }
   });
   s += `<text x="${M.l + (W - M.l - M.r) / 2}" y="${H - 4}" class="axis-label" text-anchor="middle">stored runs (oldest → newest)</text>`;
