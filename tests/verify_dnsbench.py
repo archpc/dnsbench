@@ -24,15 +24,35 @@ def check(name, ok, detail=""):
     print(f"{'PASS' if ok else 'FAIL'}  {name}  {detail}")
 
 
-def get_json(url, tries=4, timeout=5):
-    """GET with retry: a busy ThreadingHTTPServer can transiently drop a poll."""
+def _retry(fn, tries=4, delay=0.5):
+    """Retry transport flakes only. An HTTPError means the server ANSWERED —
+    that status is the result, never retried (POST retries would double-fire)."""
     for i in range(tries):
         try:
-            return json.load(urllib.request.urlopen(url, timeout=timeout))
+            return fn()
+        except urllib.error.HTTPError:
+            raise
         except Exception:
             if i == tries - 1:
                 raise
-            time.sleep(0.5)
+            time.sleep(delay)
+
+
+def get_json(url, tries=4, timeout=5):
+    """GET with retry: a busy ThreadingHTTPServer can transiently drop a poll."""
+    return _retry(lambda: json.load(urllib.request.urlopen(url, timeout=timeout)),
+                  tries=tries)
+
+
+def post_json(base, path, obj, timeout=10):
+    req = urllib.request.Request(
+        f"{base}{path}", data=json.dumps(obj).encode(),
+        headers={"Content-Type": "application/json"}, method="POST")
+    return _retry(lambda: json.load(urllib.request.urlopen(req, timeout=timeout)))
+
+
+def get_body(base, path, timeout=10):
+    return _retry(lambda: urllib.request.urlopen(f"{base}{path}", timeout=timeout).read())
 
 
 def free_port():
@@ -124,23 +144,23 @@ try:
     check("state reports candidates", state["n_candidates"] == 62608)
     check("confirm threshold present", state["confirm_threshold"] == 50)
 
-    ds = json.load(urllib.request.urlopen(f"{base}/api/datasets"))
+    ds = get_json(f"{base}/api/datasets")
     check("datasets endpoint", ds["candidates"] == 62608 and ds["liveness_rows"] == 62608
           and ds["screened"] == 6744, f"screened={ds['screened']}")
 
-    pts_resp = json.load(urllib.request.urlopen(f"{base}/api/points", timeout=30))
+    pts_resp = get_json(f"{base}/api/points", timeout=30)
     check("points endpoint", len(pts_resp["points"]) == 62608)
-    meta = json.load(urllib.request.urlopen(f"{base}/api/points-meta", timeout=30))
+    meta = get_json(f"{base}/api/points-meta", timeout=30)
     check("points-meta endpoint", len(meta["ips"]) == 62608)
 
-    runs = json.load(urllib.request.urlopen(f"{base}/api/runs"))
+    runs = get_json(f"{base}/api/runs")
     check("runs endpoint lists history", len(runs["runs"]) >= 1,
           f"{len(runs['runs'])} runs")
 
     # static assets
     for path, marker in (("/", b"viz-canvas"), ("/app.js", b"ingestPoints"),
                          ("/styles.css", b"--accent"), ("/viz.wasm", b"\x00asm")):
-        body = urllib.request.urlopen(f"{base}{path}", timeout=10).read()
+        body = get_body(base, path)
         check(f"static {path}", marker in body or (path == "/viz.wasm" and body[:4] == b"\x00asm"),
               f"{len(body)} bytes")
 
@@ -175,11 +195,7 @@ try:
     time.sleep(1.0)
 
     # run lifecycle: n=12 (below confirm threshold) skip screening
-    req = urllib.request.Request(
-        f"{base}/api/run",
-        data=json.dumps({"n": 12, "screening": "skip", "workers": 20}).encode(),
-        headers={"Content-Type": "application/json"}, method="POST")
-    resp = json.load(urllib.request.urlopen(req, timeout=10))
+    resp = post_json(base, "/api/run", {"n": 12, "screening": "skip", "workers": 20})
     check("run accepted", resp.get("started") is True, str(resp))
 
     # confirm gate: n=150 without confirmed
@@ -190,18 +206,10 @@ try:
         if not st["running"]:
             break
         time.sleep(0.5)
-    req = urllib.request.Request(
-        f"{base}/api/run",
-        data=json.dumps({"n": 150, "screening": "skip"}).encode(),
-        headers={"Content-Type": "application/json"}, method="POST")
-    resp = json.load(urllib.request.urlopen(req, timeout=10))
+    resp = post_json(base, "/api/run", {"n": 150, "screening": "skip"})
     check("confirm gate for n=150", "confirm_required" in resp, str(resp)[:80])
     # decline
-    req = urllib.request.Request(
-        f"{base}/api/confirm",
-        data=json.dumps({"confirmed": False}).encode(),
-        headers={"Content-Type": "application/json"}, method="POST")
-    urllib.request.urlopen(req, timeout=10)
+    post_json(base, "/api/confirm", {"confirmed": False})
     st = get_json(f"{base}/api/state")
     check("decline clears pending", st["pending_confirm"] is False)
 
@@ -211,17 +219,12 @@ try:
         data=json.dumps({"confirmed": True}).encode(),
         headers={"Content-Type": "application/json"}, method="POST")
     # pending was cleared by decline; start fresh with confirmed inline
-    req = urllib.request.Request(
-        f"{base}/api/run",
-        data=json.dumps({"n": 150, "screening": "skip", "confirmed": True,
-                         "workers": 40}).encode(),
-        headers={"Content-Type": "application/json"}, method="POST")
-    resp = json.load(urllib.request.urlopen(req, timeout=10))
+    resp = post_json(base, "/api/run",
+                     {"n": 150, "screening": "skip", "confirmed": True,
+                      "workers": 40})
     check("confirmed run starts", resp.get("started") is True)
     time.sleep(2)
-    req = urllib.request.Request(f"{base}/api/cancel", data=b"{}", method="POST",
-                                 headers={"Content-Type": "application/json"})
-    resp = json.load(urllib.request.urlopen(req, timeout=10))
+    resp = post_json(base, "/api/cancel", {})
     check("cancel accepted", resp.get("cancelled") is True)
 
     # wait for the n=12 job (or its cancel) to finish; verify events
@@ -257,8 +260,7 @@ try:
     # compare endpoint between two stored runs
     if len(runs["runs"]) >= 2:
         a, b = runs["runs"][0]["ts"], runs["runs"][1]["ts"]
-        cmp = json.load(urllib.request.urlopen(f"{base}/api/compare/{a}/{b}",
-                                               timeout=15))
+        cmp = get_json(f"{base}/api/compare/{a}/{b}", timeout=15)
         check("compare endpoint", "overlap" in cmp, f"overlap={cmp.get('overlap')}")
 finally:
     proc.send_signal(signal.SIGTERM)
