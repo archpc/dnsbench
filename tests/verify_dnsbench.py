@@ -24,6 +24,17 @@ def check(name, ok, detail=""):
     print(f"{'PASS' if ok else 'FAIL'}  {name}  {detail}")
 
 
+def get_json(url, tries=4, timeout=5):
+    """GET with retry: a busy ThreadingHTTPServer can transiently drop a poll."""
+    for i in range(tries):
+        try:
+            return json.load(urllib.request.urlopen(url, timeout=timeout))
+        except Exception:
+            if i == tries - 1:
+                raise
+            time.sleep(0.5)
+
+
 def free_port():
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
@@ -109,7 +120,7 @@ try:
             time.sleep(0.25)
     check("server boots on ephemeral port", up)
 
-    state = json.load(urllib.request.urlopen(f"{base}/api/state"))
+    state = get_json(f"{base}/api/state")
     check("state reports candidates", state["n_candidates"] == 62608)
     check("confirm threshold present", state["confirm_threshold"] == 50)
 
@@ -175,7 +186,7 @@ try:
     time.sleep(1)  # let job start
     deadline = time.time() + 5
     while time.time() < deadline:
-        st = json.load(urllib.request.urlopen(f"{base}/api/state"))
+        st = get_json(f"{base}/api/state")
         if not st["running"]:
             break
         time.sleep(0.5)
@@ -191,7 +202,7 @@ try:
         data=json.dumps({"confirmed": False}).encode(),
         headers={"Content-Type": "application/json"}, method="POST")
     urllib.request.urlopen(req, timeout=10)
-    st = json.load(urllib.request.urlopen(f"{base}/api/state"))
+    st = get_json(f"{base}/api/state")
     check("decline clears pending", st["pending_confirm"] is False)
 
     # cancel path: start a 150-run confirmed then cancel immediately
@@ -216,7 +227,7 @@ try:
     # wait for the n=12 job (or its cancel) to finish; verify events
     deadline = time.time() + 90
     while time.time() < deadline:
-        st = json.load(urllib.request.urlopen(f"{base}/api/state"))
+        st = get_json(f"{base}/api/state")
         if not st["running"]:
             break
         time.sleep(1)
