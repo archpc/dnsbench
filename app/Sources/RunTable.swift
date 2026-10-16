@@ -56,6 +56,9 @@ struct RunTable: View {
                     .help("\(unreach) unreachable probes")
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(row.category ?? "Unknown provider"), \(row.ip), " +
+            "uncached median \(row.uMed.map { String(format: "%.1f", $0) } ?? "none") milliseconds")
     }
 
     private func timeoutCell(_ row: RankedServer) -> some View {

@@ -147,6 +147,7 @@ struct ResolverStatsPanel: View {
             statCell("Cached med.", Fmt.ms1(median(s.cached)))
             statCell("p90", Fmt.ms1(percentile(s.uncached, 0.9)))
             statCell("p99", Fmt.ms1(percentile(s.uncached, 0.99)))
+            statCell("Samples", "u \(s.uncached.count) / c \(s.cached.count)")
             statCell("Timeouts", "\(s.toU + s.toC)")
             statCell("Invalid cached", String(s.badC))
         }

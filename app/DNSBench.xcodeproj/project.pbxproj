@@ -25,6 +25,7 @@
 		E6624C74FCF6A90579597337 /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5E2837EBACCA457A6C55FA /* OverviewView.swift */; };
 		EA69EAB27E9E65D4F770BF20 /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 678901E32F1ADBEF7BF213A6 /* SmokeTests.swift */; };
 		EA87F62426DC4EA55D6BCD5F /* SnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5328F44C1B08B67B853AC321 /* SnapshotTests.swift */; };
+		EE58B5365EFB545B8300325C /* PaneCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110E5424FA4A107F8A21316B /* PaneCommands.swift */; };
 		F03EDDE106878A5C46502777 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2158B8F946A8904A923341C2 /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
@@ -39,6 +40,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		110E5424FA4A107F8A21316B /* PaneCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneCommands.swift; sourceTree = "<group>"; };
 		1356A1E3CC21AE278D077BDA /* ResolverInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResolverInspector.swift; sourceTree = "<group>"; };
 		1516EB0A2D82A86D34EFEAEA /* DNSBench.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DNSBench.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		16378B44898D20DAFD5EF06B /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -95,6 +97,7 @@
 				AA686C4A44C72A8B7EF51763 /* HistoryView.swift */,
 				16378B44898D20DAFD5EF06B /* Models.swift */,
 				1E5E2837EBACCA457A6C55FA /* OverviewView.swift */,
+				110E5424FA4A107F8A21316B /* PaneCommands.swift */,
 				CC10BAF2EBE7F0DB6AF1C6AB /* RankingsView.swift */,
 				1356A1E3CC21AE278D077BDA /* ResolverInspector.swift */,
 				9E011BAC0B9626C88BD8A635 /* RunStore.swift */,
@@ -237,6 +240,7 @@
 				127761D92512634D7DB22783 /* HistoryView.swift in Sources */,
 				DD81A0279933BECCADBE80A4 /* Models.swift in Sources */,
 				E6624C74FCF6A90579597337 /* OverviewView.swift in Sources */,
+				EE58B5365EFB545B8300325C /* PaneCommands.swift in Sources */,
 				1E4AE07737A100AB07010D17 /* RankingsView.swift in Sources */,
 				0A7057611C37BA14389FA0A2 /* ResolverInspector.swift in Sources */,
 				412C57C4759F7DD2709BEED9 /* RunStore.swift in Sources */,

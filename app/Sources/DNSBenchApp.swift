@@ -12,6 +12,11 @@ struct DNSBenchApp: App {
         }
         .windowToolbarStyle(.unified)
         .defaultSize(width: 1180, height: 760)
+        .commands {
+            PaneCommands(model: model)
+            SidebarCommands()
+            InspectorCommands()
+        }
 
         Settings {
             SettingsView()

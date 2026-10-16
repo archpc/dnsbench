@@ -65,13 +65,14 @@ struct BenchmarkView: View {
                     } label: {
                         Label("Cancel benchmark", systemImage: "stop.fill")
                     }
+                    .keyboardShortcut(".", modifiers: .command)
                 } else {
                     Button {
                         Task { await startBenchmark() }
                     } label: {
                         Label("Start benchmark", systemImage: "play.fill")
                     }
-                    .keyboardShortcut(.defaultAction)
+                    .keyboardShortcut("r", modifiers: .command)
                     .disabled(model.pingInfo == nil)
                 }
                 if let lastError {
