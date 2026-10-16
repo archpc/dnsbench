@@ -63,7 +63,7 @@ def free_port():
 
 
 # ---- 1. dnslib selftest (validation correctness) ----
-sys.path.insert(0, os.path.join(APP, "server-lib"))
+sys.path.insert(0, os.path.join(APP, "engine"))
 sys.path.insert(0, os.path.expanduser(
     "~/.hermes/skills/macos-diagnostics/dns-benchmark/scripts"))
 import dnslib  # noqa: E402
@@ -83,7 +83,7 @@ check("q_validated honors runtime TIMEOUT attr", 0.03 < dt < 0.30 and rc == -2,
       f"dt={dt*1000:.0f}ms rc={rc}")
 dnslib.TIMEOUT = 2.0
 
-import engine  # noqa: E402
+import adapter as engine  # noqa: E402
 
 # ---- 2. engine adapter ----
 p, t = engine.selftest()

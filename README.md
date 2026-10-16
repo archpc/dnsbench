@@ -8,7 +8,7 @@ No frameworks, no dependencies, no wasm.
 ## Components
 
     server.py               stdlib HTTP + SSE (Server-Sent Events), 127.0.0.1 only
-    server-lib/engine.py    adapter — the ONLY module that touches the benchmark
+    engine/adapter.py       adapter — the ONLY module that touches the benchmark
                             engine; imports the validated dns-benchmark skill
                             scripts (dnslib/discover/measure/stability) as-is,
                             never mutates them
@@ -28,7 +28,7 @@ Requirements:
 - The benchmark engine: this app imports the validated skill scripts from
   `~/.hermes/skills/macos-diagnostics/dns-benchmark/scripts/` (dnslib.py,
   discover.py, measure.py, stability.py). If installed elsewhere, adjust
-  `SKILL_SCRIPTS` at the top of `server-lib/engine.py`.
+  `SKILL_SCRIPTS` at the top of `engine/adapter.py`.
 - Bench datasets under `datasets/` (master-ipv4.txt, phase2b-results.jsonl,
   pool.json, ...). They are intentionally not committed — generate them with
   the discovery pipeline of the dns-benchmark skill, or copy from an existing

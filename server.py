@@ -4,7 +4,7 @@
 Architecture (per approved design):
 - transport: Server-Sent Events (EventSource) for server->client stream;
   plain fetch for commands. No hand-rolled WebSocket.
-- engine: server-lib/engine.py is the ONLY module touching the validated
+- engine: engine/adapter.py is the ONLY module touching the validated
   dns-benchmark skill scripts; the skill is imported as-is, never mutated.
 - runs: every run gets an isolated directory datasets/runs/<UTC-ts>/.
   Checkpoints are never deleted; fresh screening copies them aside first.
@@ -22,10 +22,11 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(APP_DIR, "static")
 if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
-if os.path.join(APP_DIR, "server-lib") not in sys.path:
-    sys.path.insert(0, os.path.join(APP_DIR, "server-lib"))
+if os.path.join(APP_DIR, "engine") not in sys.path:
+    sys.path.insert(0, os.path.join(APP_DIR, "engine"))
 
-import engine  # noqa: E402
+# the adapter lives in engine/ (shared with the native app helper)
+import adapter as engine  # noqa: E402
 
 PORT = int(os.environ.get("DNSBENCH_PORT", "8461"))
 HOST = "127.0.0.1"

@@ -16,7 +16,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                "..", "server-lib"))
+                                "..", "engine"))
 sys.path.insert(0, os.path.expanduser(
     "~/.hermes/skills/macos-diagnostics/dns-benchmark/scripts"))
 import stability  # noqa: E402

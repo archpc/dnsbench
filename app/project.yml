@@ -1,0 +1,60 @@
+name: DNSBench
+options:
+  bundleIdPrefix: me.sbunnell
+  createIntermediateGroups: true
+  deploymentTarget:
+    macOS: "26.0"
+  xcodeVersion: "27.0"
+targets:
+  DNSBench:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+      # vendored engine (validated skill scripts + adapter + helper)
+      - path: ../engine
+        type: folder
+        buildPhase: resources
+      # bundled relocatable Python runtime (python-build-standalone)
+      - path: Resources/python
+        type: folder
+        buildPhase: resources
+    resources:
+      - path: Assets.xcassets
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.sbunnell.DNSBench
+        PRODUCT_NAME: DNSBench
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: true
+        INFOPLIST_KEY_CFBundleDisplayName: DNSBench
+        INFOPLIST_KEY_LSMinimumSystemVersion: "26.0"
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: NO
+        ENABLE_HARDENED_RUNTIME: NO
+        SWIFT_STRICT_CONCURRENCY: complete
+        OTHER_SWIFT_FLAGS: -Xfrontend -warn-long-function-bodies=300
+  DNSBenchTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: DNSBench
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: true
+schemes:
+  DNSBench:
+    build:
+      targets:
+        DNSBench: all
+        DNSBenchTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - DNSBenchTests

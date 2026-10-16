@@ -7,3 +7,6 @@ datasets/
 __pycache__/
 *.pyc
 .DS_Store
+app/Resources/python/
+app/build/
+.DS_Store

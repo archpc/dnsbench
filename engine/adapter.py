@@ -20,18 +20,29 @@ import sys
 import threading
 import time
 
+# Engine adapter shared by the web server and the native app helper.
+# Data location: DNSBENCH_DATA_DIR env (set by the app bundle; the app points
+# it at the repo datasets/ for development or an Application Support dir when
+# installed). Defaults to <repo>/datasets for the dev checkout.
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+VENDORED = os.path.dirname(os.path.abspath(__file__))
 SKILL_SCRIPTS = os.path.expanduser(
     "~/.hermes/skills/macos-diagnostics/dns-benchmark/scripts")
-if SKILL_SCRIPTS not in sys.path:
+# Vendored skill-script copies are the authoritative source (self-containment
+# for the native app); the skill dir is a fallback for the dev checkout.
+# Inserted last so it sits FIRST on sys.path.
+if os.path.isdir(SKILL_SCRIPTS) and SKILL_SCRIPTS not in sys.path:
     sys.path.insert(0, SKILL_SCRIPTS)
+if os.path.isdir(VENDORED):
+    sys.path.insert(0, VENDORED)
 
 import dnslib   # noqa: E402
 import discover  # noqa: E402
 import measure   # noqa: E402
 
-RUNS = os.path.join(APP_DIR, "datasets", "runs")
-DATASETS = os.path.join(APP_DIR, "datasets")
+DATA_DIR = os.environ.get("DNSBENCH_DATA_DIR") or os.path.join(APP_DIR, "datasets")
+RUNS = os.path.join(DATA_DIR, "runs")
+DATASETS = DATA_DIR
 SCRATCH = os.path.expanduser("~/.hermes/cache/scratch")
 
 

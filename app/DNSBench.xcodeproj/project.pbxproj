@@ -1,0 +1,497 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0A7057611C37BA14389FA0A2 /* ResolverInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1356A1E3CC21AE278D077BDA /* ResolverInspector.swift */; };
+		127761D92512634D7DB22783 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA686C4A44C72A8B7EF51763 /* HistoryView.swift */; };
+		1E4AE07737A100AB07010D17 /* RankingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC10BAF2EBE7F0DB6AF1C6AB /* RankingsView.swift */; };
+		412C57C4759F7DD2709BEED9 /* RunStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E011BAC0B9626C88BD8A635 /* RunStore.swift */; };
+		497D42705E2D15A90FE15E59 /* HelperController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D87E0CD890530445E01866B /* HelperController.swift */; };
+		63074690DF2FB2CEB6C7544E /* DNSBenchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99FD0A5794BCF6055C82B2B7 /* DNSBenchApp.swift */; };
+		6E5E1B7354C012C6251BF211 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C31527646619C7E6C1B08F5E /* ContentView.swift */; };
+		74550BF0D45496076AA04235 /* python in Resources */ = {isa = PBXBuildFile; fileRef = 47BC4E7FAD558A02CBB75B41 /* python */; };
+		82212938F1132A3065FD929E /* ExploreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C1715F46252A51B2B8C118A /* ExploreView.swift */; };
+		9346949E3BAD648283755012 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1957CF71E4930B1147521AB2 /* AppModel.swift */; };
+		985B84A1568F1A52DD4431A6 /* BenchmarkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B377101CC85729C3ABACD85 /* BenchmarkView.swift */; };
+		AD87C1EFF577A8A4D48EDDEE /* RunTable.swift in Sources */ = {isa = PBXBuildFile; fileRef = D50BC82E4B71F2A5E1A6EFF7 /* RunTable.swift */; };
+		D47A9B1018D1C60E9E3AB1F2 /* Fmt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D830B5AB7889C527C64604A /* Fmt.swift */; };
+		DD81A0279933BECCADBE80A4 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16378B44898D20DAFD5EF06B /* Models.swift */; };
+		E12A2234E39AA7420D0394A4 /* engine in Resources */ = {isa = PBXBuildFile; fileRef = F5572B7EDFFE1176BEB8F0A6 /* engine */; };
+		E6624C74FCF6A90579597337 /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5E2837EBACCA457A6C55FA /* OverviewView.swift */; };
+		EA69EAB27E9E65D4F770BF20 /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 678901E32F1ADBEF7BF213A6 /* SmokeTests.swift */; };
+		EA87F62426DC4EA55D6BCD5F /* SnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5328F44C1B08B67B853AC321 /* SnapshotTests.swift */; };
+		F03EDDE106878A5C46502777 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2158B8F946A8904A923341C2 /* SettingsView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		1982A78F2A90D047F604F01E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 17FDAB30ED1A8D15184B7EBC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A432EEFEE3B3368F21460077;
+			remoteInfo = DNSBench;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		1356A1E3CC21AE278D077BDA /* ResolverInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResolverInspector.swift; sourceTree = "<group>"; };
+		1516EB0A2D82A86D34EFEAEA /* DNSBench.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DNSBench.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		16378B44898D20DAFD5EF06B /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		1957CF71E4930B1147521AB2 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		1E5E2837EBACCA457A6C55FA /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
+		2158B8F946A8904A923341C2 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		47BC4E7FAD558A02CBB75B41 /* python */ = {isa = PBXFileReference; lastKnownFileType = folder; name = python; path = Resources/python; sourceTree = SOURCE_ROOT; };
+		4B377101CC85729C3ABACD85 /* BenchmarkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BenchmarkView.swift; sourceTree = "<group>"; };
+		4C1715F46252A51B2B8C118A /* ExploreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExploreView.swift; sourceTree = "<group>"; };
+		5328F44C1B08B67B853AC321 /* SnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotTests.swift; sourceTree = "<group>"; };
+		678901E32F1ADBEF7BF213A6 /* SmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
+		6D87E0CD890530445E01866B /* HelperController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperController.swift; sourceTree = "<group>"; };
+		8D830B5AB7889C527C64604A /* Fmt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fmt.swift; sourceTree = "<group>"; };
+		99FD0A5794BCF6055C82B2B7 /* DNSBenchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DNSBenchApp.swift; sourceTree = "<group>"; };
+		9E011BAC0B9626C88BD8A635 /* RunStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunStore.swift; sourceTree = "<group>"; };
+		A175296325CC4F4BED426ECD /* DNSBenchTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DNSBenchTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA686C4A44C72A8B7EF51763 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		C31527646619C7E6C1B08F5E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		CC10BAF2EBE7F0DB6AF1C6AB /* RankingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RankingsView.swift; sourceTree = "<group>"; };
+		D50BC82E4B71F2A5E1A6EFF7 /* RunTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunTable.swift; sourceTree = "<group>"; };
+		F5572B7EDFFE1176BEB8F0A6 /* engine */ = {isa = PBXFileReference; lastKnownFileType = folder; name = engine; path = ../engine; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		4542FAFD924B9CAAE5C40FEE /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				47BC4E7FAD558A02CBB75B41 /* python */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		4747ACD9CAF04F97D87857F8 = {
+			isa = PBXGroup;
+			children = (
+				A1278260377E524F73205ABE /* dnsbench */,
+				4542FAFD924B9CAAE5C40FEE /* Resources */,
+				4E5F18C801E6EDFF102E54DA /* Sources */,
+				53FC26B030C8C1E9BE4648FB /* Tests */,
+				CF30F8A54813608EF114A021 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		4E5F18C801E6EDFF102E54DA /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				1957CF71E4930B1147521AB2 /* AppModel.swift */,
+				4B377101CC85729C3ABACD85 /* BenchmarkView.swift */,
+				C31527646619C7E6C1B08F5E /* ContentView.swift */,
+				99FD0A5794BCF6055C82B2B7 /* DNSBenchApp.swift */,
+				4C1715F46252A51B2B8C118A /* ExploreView.swift */,
+				8D830B5AB7889C527C64604A /* Fmt.swift */,
+				6D87E0CD890530445E01866B /* HelperController.swift */,
+				AA686C4A44C72A8B7EF51763 /* HistoryView.swift */,
+				16378B44898D20DAFD5EF06B /* Models.swift */,
+				1E5E2837EBACCA457A6C55FA /* OverviewView.swift */,
+				CC10BAF2EBE7F0DB6AF1C6AB /* RankingsView.swift */,
+				1356A1E3CC21AE278D077BDA /* ResolverInspector.swift */,
+				9E011BAC0B9626C88BD8A635 /* RunStore.swift */,
+				D50BC82E4B71F2A5E1A6EFF7 /* RunTable.swift */,
+				2158B8F946A8904A923341C2 /* SettingsView.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		53FC26B030C8C1E9BE4648FB /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				678901E32F1ADBEF7BF213A6 /* SmokeTests.swift */,
+				5328F44C1B08B67B853AC321 /* SnapshotTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		A1278260377E524F73205ABE /* dnsbench */ = {
+			isa = PBXGroup;
+			children = (
+				F5572B7EDFFE1176BEB8F0A6 /* engine */,
+			);
+			name = dnsbench;
+			path = ..;
+			sourceTree = "<group>";
+		};
+		CF30F8A54813608EF114A021 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1516EB0A2D82A86D34EFEAEA /* DNSBench.app */,
+				A175296325CC4F4BED426ECD /* DNSBenchTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		6D7B7BB2D58519A9A96468BB /* DNSBenchTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5A2BA372563C67FDAC0485A6 /* Build configuration list for PBXNativeTarget "DNSBenchTests" */;
+			buildPhases = (
+				39E4CC22982C9BE85D080FB4 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8BBFA0D82E3F33A56F787507 /* PBXTargetDependency */,
+			);
+			name = DNSBenchTests;
+			packageProductDependencies = (
+			);
+			productName = DNSBenchTests;
+			productReference = A175296325CC4F4BED426ECD /* DNSBenchTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		A432EEFEE3B3368F21460077 /* DNSBench */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C32F82801812D51B5F70E420 /* Build configuration list for PBXNativeTarget "DNSBench" */;
+			buildPhases = (
+				4F7695D97034D242D3BF6957 /* Sources */,
+				A1135EC72B61EB207858C2B5 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DNSBench;
+			packageProductDependencies = (
+			);
+			productName = DNSBench;
+			productReference = 1516EB0A2D82A86D34EFEAEA /* DNSBench.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		17FDAB30ED1A8D15184B7EBC /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = 74AF6066F63A0EAFDDEE7143 /* Build configuration list for PBXProject "DNSBench" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 4747ACD9CAF04F97D87857F8;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = CF30F8A54813608EF114A021 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A432EEFEE3B3368F21460077 /* DNSBench */,
+				6D7B7BB2D58519A9A96468BB /* DNSBenchTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A1135EC72B61EB207858C2B5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E12A2234E39AA7420D0394A4 /* engine in Resources */,
+				74550BF0D45496076AA04235 /* python in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		39E4CC22982C9BE85D080FB4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EA69EAB27E9E65D4F770BF20 /* SmokeTests.swift in Sources */,
+				EA87F62426DC4EA55D6BCD5F /* SnapshotTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4F7695D97034D242D3BF6957 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9346949E3BAD648283755012 /* AppModel.swift in Sources */,
+				985B84A1568F1A52DD4431A6 /* BenchmarkView.swift in Sources */,
+				6E5E1B7354C012C6251BF211 /* ContentView.swift in Sources */,
+				63074690DF2FB2CEB6C7544E /* DNSBenchApp.swift in Sources */,
+				82212938F1132A3065FD929E /* ExploreView.swift in Sources */,
+				D47A9B1018D1C60E9E3AB1F2 /* Fmt.swift in Sources */,
+				497D42705E2D15A90FE15E59 /* HelperController.swift in Sources */,
+				127761D92512634D7DB22783 /* HistoryView.swift in Sources */,
+				DD81A0279933BECCADBE80A4 /* Models.swift in Sources */,
+				E6624C74FCF6A90579597337 /* OverviewView.swift in Sources */,
+				1E4AE07737A100AB07010D17 /* RankingsView.swift in Sources */,
+				0A7057611C37BA14389FA0A2 /* ResolverInspector.swift in Sources */,
+				412C57C4759F7DD2709BEED9 /* RunStore.swift in Sources */,
+				AD87C1EFF577A8A4D48EDDEE /* RunTable.swift in Sources */,
+				F03EDDE106878A5C46502777 /* SettingsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8BBFA0D82E3F33A56F787507 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A432EEFEE3B3368F21460077 /* DNSBench */;
+			targetProxy = 1982A78F2A90D047F604F01E /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		193AEF5DA0C067D5645CAD77 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		1D9CB24B48842A49E405DF08 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = me.sbunnell.DNSBenchTests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DNSBench.app/Contents/MacOS/DNSBench";
+			};
+			name = Debug;
+		};
+		237835B58640AAE7A4358260 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = me.sbunnell.DNSBenchTests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DNSBench.app/Contents/MacOS/DNSBench";
+			};
+			name = Release;
+		};
+		3C3ED8BB37B801CC0BB92557 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = DNSBench;
+				INFOPLIST_KEY_LSMinimumSystemVersion = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-function-bodies=300";
+				PRODUCT_BUNDLE_IDENTIFIER = me.sbunnell.DNSBench;
+				PRODUCT_NAME = DNSBench;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		49DB5EFB3B255C6FE1B34C47 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		D85569CCA0F4DC80E2CEDC25 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = DNSBench;
+				INFOPLIST_KEY_LSMinimumSystemVersion = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-function-bodies=300";
+				PRODUCT_BUNDLE_IDENTIFIER = me.sbunnell.DNSBench;
+				PRODUCT_NAME = DNSBench;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		5A2BA372563C67FDAC0485A6 /* Build configuration list for PBXNativeTarget "DNSBenchTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1D9CB24B48842A49E405DF08 /* Debug */,
+				237835B58640AAE7A4358260 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		74AF6066F63A0EAFDDEE7143 /* Build configuration list for PBXProject "DNSBench" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				49DB5EFB3B255C6FE1B34C47 /* Debug */,
+				193AEF5DA0C067D5645CAD77 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C32F82801812D51B5F70E420 /* Build configuration list for PBXNativeTarget "DNSBench" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D85569CCA0F4DC80E2CEDC25 /* Debug */,
+				3C3ED8BB37B801CC0BB92557 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 17FDAB30ED1A8D15184B7EBC /* Project object */;
+}
