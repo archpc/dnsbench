@@ -404,10 +404,6 @@ function renderRun() {
 /* ---------- selection + detail ---------- */
 async function selectResolver(ip, scroll = true) {
   state.selected = ip;
-  document.querySelectorAll(".bar-row.selected, #rank-table tr.selected")
-    .forEach((el) => el.classList.remove("selected"));
-  document.querySelectorAll(`.bar-row[data-ip="${ip}"], #rank-table tr[data-ip="${ip}"]`)
-    .forEach((el) => el.classList.add("selected"));
   renderBarsSelected();
   renderExplore();
   await renderDetail();
@@ -472,13 +468,13 @@ async function renderDetail() {
     (uOk ? `<tr><td>Uncached samples recorded</td><td>${uOk.ok.length} valid + ${uOk.timeouts} timed out</td></tr>` : "") +
     (cOk ? `<tr><td>Cached samples recorded</td><td>${cOk.ok.length} valid + ${cOk.timeouts} timed out + ${cOk.invalid} invalid</td></tr>` : "") +
     `</tbody></table>` +
-    (q && !q.error ? distStrip("Uncached samples", uOk, distMax(q, uOk, cOk))
-      + distStrip("Cached samples", cOk, distMax(q, uOk, cOk))
+    (q && !q.error ? distStrip("Uncached samples", uOk, distMax(uOk, cOk))
+      + distStrip("Cached samples", cOk, distMax(uOk, cOk))
       : '<p class="note bad-note">no per-query sample log for this run — distribution unavailable, medians above are as stored</p>') +
     `<details class="help"><summary>What these metrics mean</summary>${helpList()}</details>`;
 }
 
-function distMax(q, a, b) {
+function distMax(a, b) {
   // one shared scale for both strips so they're comparable
   const all = [...(a?.ok || []), ...(b?.ok || [])];
   return Math.max(...all, 1);

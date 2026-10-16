@@ -347,7 +347,6 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .chart-wrap svg .ln { stroke-width: 1.5; fill: none; }
 .chart-wrap svg .ln.me { stroke: var(--accent); stroke-width: 2.5; }
 .chart-wrap svg .ln.ref { stroke: var(--text-dim); stroke-dasharray: 3 3; }
-.chart-wrap svg .circle.me { }
 .chart-wrap svg .pt.me { fill: var(--accent); }
 .chart-wrap svg .pt.ref { fill: var(--text-dim); opacity: 0.7; }
 .chart-wrap svg .lg { font-family: var(--mono); font-size: 10px; }
@@ -410,7 +409,6 @@ tbody tr:hover { background: var(--bg-panel-2); }
 td.ip { color: var(--accent); }
 td.provider { color: var(--text-dim); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 td.warn { color: var(--warn); }
-td.bad { color: var(--bad); }
 #rank-table tbody { max-height: 420px; overflow-y: auto; display: block; }
 #rank-table thead, #rank-table tbody tr { display: table; width: 100%; table-layout: fixed; }
 #rank-table th:nth-child(1) { width: 34px; }

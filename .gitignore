@@ -6,4 +6,4 @@ datasets/
 
 __pycache__/
 *.pyc
-viz/target/
+.DS_Store

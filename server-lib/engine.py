@@ -2,7 +2,7 @@
 """Engine adapter: the ONLY module that touches the validated dns-benchmark skill.
 
 Isolation guarantees (per user directive: preserve the validated engine):
-- imports the skill scripts (dnslib/discover/measure/stability) as-is
+- imports the skill scripts (dnslib/discover/measure) as-is
 - never mutates skill files; configuration changes go through dnslib module attrs
 - every run gets an isolated directory under RUNS/<UTC-timestamp>/ (never deletes
   checkpoints; fresh screening COPIES checkpoints aside into the run dir instead
@@ -32,7 +32,7 @@ import measure   # noqa: E402
 
 RUNS = os.path.join(APP_DIR, "datasets", "runs")
 DATASETS = os.path.join(APP_DIR, "datasets")
-SCRATCH = "/Users/sein/.hermes/cache/scratch"
+SCRATCH = os.path.expanduser("~/.hermes/cache/scratch")
 
 
 class Tee(io.TextIOBase):
@@ -203,15 +203,14 @@ def run_discovery(mode, on_progress, cancel_event):
         os.chdir(APP_DIR)
 
 
-def run_measure(pool_path, n, workers, on_server, cancel_event, run_dir=None):
+def run_measure(pool_path, n, workers, on_server, cancel_event):
     """Deep-bench top n of pool; identical logic to measure.main minus argparse.
 
-    Writes all outputs into run_dir (new isolated dir if not given).
-    Calls on_server(dict) per completed server (includes idx for viz).
-    Returns (ranked, run_dir).
+    Writes all outputs into a new isolated run dir (never reuses or deletes
+    checkpoints). Calls on_server(dict) per completed server (includes idx for
+    viz). Returns (ranked, run_dir).
     """
-    if run_dir is None:
-        run_dir, _ = new_run_dir()
+    run_dir, _ = new_run_dir()
     os.makedirs(run_dir, exist_ok=True)
     preserve_checkpoints(run_dir)
     pool = json.load(open(pool_path))
@@ -231,7 +230,6 @@ def run_measure(pool_path, n, workers, on_server, cancel_event, run_dir=None):
         def __init__(self):
             self.lock = threading.Lock()
             self.count = 0
-            self.total = len(ips) * 116
 
         def write(self, s):
             with self.lock:
@@ -239,7 +237,6 @@ def run_measure(pool_path, n, workers, on_server, cancel_event, run_dir=None):
                 self.count += 1
                 if self.count % 200 == 0:
                     fw.flush()
-                    on_progress = None  # progress driven by server_done instead
             return len(s)
 
         def flush(self):
@@ -296,7 +293,25 @@ def master_ips():
     p = os.path.join(DATASETS, "master-ipv4.txt")
     if not os.path.exists(p):
         return []
-    return [l.strip() for l in open(p) if l.strip]
+    return [l.strip() for l in open(p) if l.strip()]
+
+
+_POINTS_CACHE = {"key": (), "value": ([], [])}  # never returned before first build
+
+
+def _datasets_key():
+    """Cache key: identity of every input file points_payload reads. Dataset
+    files are append-only raw data; mtime+size is sufficient invalidation."""
+    key = []
+    for name in ("master-ipv4.txt", "live-phase1.jsonl",
+                 "phase2b-results.jsonl", "pool.json"):
+        p = os.path.join(DATASETS, name)
+        try:
+            st = os.stat(p)
+            key.append((name, st.st_mtime_ns, st.st_size))
+        except OSError:
+            key.append((name, None, None))
+    return tuple(key)
 
 
 def points_payload():
@@ -304,7 +319,12 @@ def points_payload():
     of truth: datasets order). Returns (cat_names, points) where points[i] matches
     master-ipv4.txt line i: [cat_id, lat_ms, status].
     status: 0 unknown, 1 alive, 2 dead, 3 hijacker. Latency: screening uncached
-    median if screened, else liveness ms."""
+    median if screened, else liveness ms.
+    Cached on dataset-file identity (rebuild costs ~370 ms per call otherwise).
+    Callers must not mutate the returned lists."""
+    key = _datasets_key()
+    if _POINTS_CACHE["key"] == key:
+        return _POINTS_CACHE["value"]
     master = [l.strip() for l in open(os.path.join(DATASETS, "master-ipv4.txt"))
               if l.strip()]
     by_ip = {}
@@ -312,7 +332,10 @@ def points_payload():
     if os.path.exists(lp):
         with open(lp) as f:
             for line in f:
-                r = json.loads(line)
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
                 by_ip[r["ip"]] = r
     screened = {}
     sp = os.path.join(DATASETS, "phase2b-results.jsonl")
@@ -338,13 +361,15 @@ def points_payload():
             else:
                 status = 1
             if r.get("uncached"):
-                lat = sorted(r["uncached"])[len(r["uncached"]) // 2]
+                lat = statistics.median(r["uncached"])
         else:
             lr = by_ip.get(ip)
             if lr is not None:
                 status = 1 if lr["alive"] else 2
                 lat = lr.get("ms") or 0.0
         points.append([ids[categorize(ip)], round(lat, 1), status])
+    _POINTS_CACHE["key"] = key
+    _POINTS_CACHE["value"] = (cat_names, points)
     return cat_names, points
 
 

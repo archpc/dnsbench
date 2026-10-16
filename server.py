@@ -15,7 +15,6 @@ import queue
 import re
 import sys
 import threading
-import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -101,7 +100,7 @@ class Job:
         screening = p.get("screening", "skip")
         broker.emit("stage", {"stage": "starting", "screening": screening})
 
-        p, t = engine.dnslib.selftest()
+        p, t = engine.selftest()
         if p != t:
             broker.emit("job_error", {"error": f"dnslib selftest failed {p}/{t}"})
             return
@@ -247,8 +246,6 @@ class Handler(BaseHTTPRequestHandler):
                        "text/javascript; charset=utf-8")
         elif path == "/styles.css":
             self._file(os.path.join(STATIC_DIR, "styles.css"), "text/css; charset=utf-8")
-        elif path == "/viz.wasm":
-            self._file(os.path.join(STATIC_DIR, "viz.wasm"), "application/wasm")
         elif path == "/api/state":
             self._json(api_state())
         elif path == "/api/points":
@@ -353,10 +350,11 @@ def api_state():
     job_alive = bool(broker.job_thread and broker.job_thread.is_alive())
     pool = engine.load_pool()
     runs = sorted(os.listdir(engine.RUNS)) if os.path.isdir(engine.RUNS) else []
+    master_path = os.path.join(engine.DATASETS, "master-ipv4.txt")
+    n_candidates = sum(1 for _ in open(master_path)) \
+        if os.path.exists(master_path) else 0
     return {"running": job_alive, "host": HOST, "port": PORT,
-            "n_candidates": sum(1 for _ in open(
-                os.path.join(engine.DATASETS, "master-ipv4.txt")))
-            if os.path.exists(os.path.join(engine.DATASETS, "master-ipv4.txt")) else 0,
+            "n_candidates": n_candidates,
             "pool": pool["meta"] if pool else None,
             "n_runs": len(runs),
             "confirm_threshold": CONFIRM_THRESHOLD,
@@ -520,7 +518,7 @@ def api_compare(ts_a, ts_b):
             c[k] = c.get(k, 0) + 1
         return c
     refs = {}
-    for ref in ["1.0.0.1", "8.8.8.8", "9.9.9.9", "208.67.222.222"]:
+    for ref in engine.measure.FORCED_REFS:
         va = next(((i, r["u_med"]) for i, r in enumerate(ra, 1) if r["ip"] == ref), None)
         vb = next(((i, r["u_med"]) for i, r in enumerate(rb, 1) if r["ip"] == ref), None)
         if va and vb:

@@ -1,9 +1,9 @@
 # DNSBench web app (v0.1.0, frozen)
 
 Local web interface for the GRC-style DNS benchmark experiment: 62,608 public
-resolver candidates, WASM point-cloud visualization, live SSE streaming during
-runs, historical run comparison. Plain stdlib Python server + hand-rolled JS +
-a 39 KB custom Rust->wasm renderer. No frameworks, no dependencies.
+resolver candidates, server-rendered SVG charts, live SSE streaming during
+runs, historical run comparison. Plain stdlib Python server + hand-rolled JS.
+No frameworks, no dependencies, no wasm.
 
 ## Components
 
@@ -15,10 +15,8 @@ a 39 KB custom Rust->wasm renderer. No frameworks, no dependencies.
     static/                 index.html / app.js / styles.css — no frameworks;
                             rankings bar chart, resolver detail, explore
                             scatter, across-runs history, coverage summary
-    viz/                    Rust WASM point-field renderer (UNSUSED since the
-                            chart redesign; kept for history)
-    tests/verify_dnsbench.py  automated end-to-end verification suite (32 checks;
-                            launches real jobs — run only when a benchmark is wanted)
+    tests/verify_dnsbench.py  automated end-to-end verification suite;
+                            launches real jobs — run only when a benchmark is wanted
     datasets/               benchmark datasets + run history — NOT in this repo
                             (kept separate from application source; .gitignored)
 
@@ -50,14 +48,15 @@ dns-benchmark skill, Pitfall #15).
 ## Verification
 
     /opt/homebrew/bin/python3.15 tests/verify_dnsbench.py
-    # 32 checks: dnslib 9-case parser selftest, engine adapter, dataset invariants,
-    # live server boot, every HTTP endpoint, static assets incl. wasm magic,
-    # SSE stream, run lifecycle (accept / confirm-gate / decline / cancel /
-    # run_complete), run-dir isolation, checkpoint preservation, compare endpoint.
+    # checks: dnslib 9-case parser selftest, engine adapter, dataset invariants,
+    # live server boot, every HTTP endpoint, static assets, SSE stream, run
+    # lifecycle (accept / confirm-gate / decline / cancel / run_complete),
+    # run-dir isolation, checkpoint preservation, compare endpoint.
     # Exits non-zero on any failure. Spawns and tracks its own server on an
     # ephemeral port; terminates only that tracked subprocess.
 
-Last full result at freeze: 32/32 PASS.
+The Rust WASM renderer (viz/) was removed 2026-10-16 as unreachable after the
+chart redesign; recover it from tag v0.1.0 if ever needed.
 
 ## Boundaries frozen at v0.1.0
 

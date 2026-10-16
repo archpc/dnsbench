@@ -10,7 +10,6 @@ import signal
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 import urllib.request
 
@@ -104,8 +103,26 @@ alive = sum(1 for x in pts if x[2] == 1)
 dead = sum(1 for x in pts if x[2] == 2)
 hij = sum(1 for x in pts if x[2] == 3)
 pool_meta = engine.load_pool()["meta"]
-check("points status distribution", alive > 5000 and hij == pool_meta["hijacked_excluded"],
-      f"alive={alive} hij={hij} meta={pool_meta}")
+# Source-of-truth consistency: the payload must paint exactly the screening's
+# hijacker rows, and the pool must exclude every one of them. Pool META is
+# derived at pool-generation time; datasets/pool.json predates the counting
+# fix (2026-10-16) where a hijacker with zero uncached samples was dropped
+# under the no-uncached bucket instead of hijacked_excluded (26 vs 27), so
+# meta can lag by that historical artifact on legacy pools. Never compare
+# meta directly; the invariants below are the ones that matter.
+screened_hij = 0
+hij_ips = set()
+with open(os.path.join(APP, "datasets", "phase2b-results.jsonl")) as f:
+    for line in f:
+        r = json.loads(line)
+        if r.get("hijack", 0) > 0:
+            screened_hij += 1
+            hij_ips.add(r["ip"])
+pool_ips = {r["ip"] for r in engine.load_pool()["pool"]}
+check("points status distribution",
+      alive > 5000 and hij == screened_hij and not (hij_ips & pool_ips),
+      f"alive={alive} hij={hij} screened_hij={screened_hij} "
+      f"hij_in_pool={len(hij_ips & pool_ips)} meta={pool_meta}")
 check("categorize sanity", engine.categorize("1.1.1.1") == "Cloudflare"
       and engine.categorize("8.8.8.8") == "Google"
       and engine.categorize("9.9.9.9") == "Quad9"
@@ -157,12 +174,12 @@ try:
     check("runs endpoint lists history", len(runs["runs"]) >= 1,
           f"{len(runs['runs'])} runs")
 
-    # static assets
-    for path, marker in (("/", b"viz-canvas"), ("/app.js", b"ingestPoints"),
-                         ("/styles.css", b"--accent"), ("/viz.wasm", b"\x00asm")):
+    # static assets (markers current as of the 2026-10-16 visualization
+    # redesign: server-rendered SVG/tables, no wasm)
+    for path, marker in (("/", b"coverage-stats"), ("/app.js", b"renderProviderTable"),
+                         ("/styles.css", b"--accent")):
         body = get_body(base, path)
-        check(f"static {path}", marker in body or (path == "/viz.wasm" and body[:4] == b"\x00asm"),
-              f"{len(body)} bytes")
+        check(f"static {path}", marker in body, f"{len(body)} bytes")
 
     # SSE: subscribe and trigger a run; collect events
     sse_events = []
@@ -170,7 +187,6 @@ try:
     def sse_reader():
         try:
             r = urllib.request.urlopen(f"{base}/events", timeout=60)
-            import http.client
             buf = b""
             while len(sse_events) < 400:
                 chunk = r.read1(4096) if hasattr(r, "read1") else r.read(4096)
@@ -198,9 +214,11 @@ try:
     resp = post_json(base, "/api/run", {"n": 12, "screening": "skip", "workers": 20})
     check("run accepted", resp.get("started") is True, str(resp))
 
-    # confirm gate: n=150 without confirmed
+    # confirm gate: n=150 without confirmed. Wait for the n=12 job to finish
+    # first — under load a 12-server deep bench can exceed a few seconds, and
+    # posting while a job is live answers 409 (Pitfall #17 tolerance).
     time.sleep(1)  # let job start
-    deadline = time.time() + 5
+    deadline = time.time() + 90
     while time.time() < deadline:
         st = get_json(f"{base}/api/state")
         if not st["running"]:
