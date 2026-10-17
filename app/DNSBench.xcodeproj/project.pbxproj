@@ -19,6 +19,7 @@
 		9346949E3BAD648283755012 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1957CF71E4930B1147521AB2 /* AppModel.swift */; };
 		985B84A1568F1A52DD4431A6 /* BenchmarkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B377101CC85729C3ABACD85 /* BenchmarkView.swift */; };
 		AD87C1EFF577A8A4D48EDDEE /* RunTable.swift in Sources */ = {isa = PBXBuildFile; fileRef = D50BC82E4B71F2A5E1A6EFF7 /* RunTable.swift */; };
+		D07172396AF644DD2B6D3495 /* DNSBench.icon in Resources */ = {isa = PBXBuildFile; fileRef = 80008910DB497589566162CC /* DNSBench.icon */; };
 		D47A9B1018D1C60E9E3AB1F2 /* Fmt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D830B5AB7889C527C64604A /* Fmt.swift */; };
 		DD81A0279933BECCADBE80A4 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16378B44898D20DAFD5EF06B /* Models.swift */; };
 		E12A2234E39AA7420D0394A4 /* engine in Resources */ = {isa = PBXBuildFile; fileRef = F5572B7EDFFE1176BEB8F0A6 /* engine */; };
@@ -53,6 +54,7 @@
 		5328F44C1B08B67B853AC321 /* SnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotTests.swift; sourceTree = "<group>"; };
 		678901E32F1ADBEF7BF213A6 /* SmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
 		6D87E0CD890530445E01866B /* HelperController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperController.swift; sourceTree = "<group>"; };
+		80008910DB497589566162CC /* DNSBench.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = DNSBench.icon; sourceTree = "<group>"; };
 		8D830B5AB7889C527C64604A /* Fmt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fmt.swift; sourceTree = "<group>"; };
 		99FD0A5794BCF6055C82B2B7 /* DNSBenchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DNSBenchApp.swift; sourceTree = "<group>"; };
 		9E011BAC0B9626C88BD8A635 /* RunStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunStore.swift; sourceTree = "<group>"; };
@@ -76,6 +78,7 @@
 		4747ACD9CAF04F97D87857F8 = {
 			isa = PBXGroup;
 			children = (
+				80008910DB497589566162CC /* DNSBench.icon */,
 				A1278260377E524F73205ABE /* dnsbench */,
 				4542FAFD924B9CAAE5C40FEE /* Resources */,
 				4E5F18C801E6EDFF102E54DA /* Sources */,
@@ -209,6 +212,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D07172396AF644DD2B6D3495 /* DNSBench.icon in Resources */,
 				E12A2234E39AA7420D0394A4 /* engine in Resources */,
 				74550BF0D45496076AA04235 /* python in Resources */,
 			);
@@ -305,7 +309,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -355,19 +359,19 @@
 		3C3ED8BB37B801CC0BB92557 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = DNSBench;
 				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGN_IDENTITY = "-";
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = DNSBench;
-				INFOPLIST_KEY_LSMinimumSystemVersion = 26.0;
+				INFOPLIST_KEY_LSMinimumSystemVersion = 27.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
 				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-function-bodies=300";
 				PRODUCT_BUNDLE_IDENTIFIER = me.sbunnell.DNSBench;
 				PRODUCT_NAME = DNSBench;
@@ -428,7 +432,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -443,19 +447,19 @@
 		D85569CCA0F4DC80E2CEDC25 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = DNSBench;
 				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGN_IDENTITY = "-";
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = DNSBench;
-				INFOPLIST_KEY_LSMinimumSystemVersion = 26.0;
+				INFOPLIST_KEY_LSMinimumSystemVersion = 27.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
 				OTHER_SWIFT_FLAGS = "-Xfrontend -warn-long-function-bodies=300";
 				PRODUCT_BUNDLE_IDENTIFIER = me.sbunnell.DNSBench;
 				PRODUCT_NAME = DNSBench;

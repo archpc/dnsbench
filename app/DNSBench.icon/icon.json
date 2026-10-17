@@ -1,0 +1,34 @@
+{
+  "fill" : {
+    "automatic-gradient" : "extended-srgb:0.00000,0.53333,1.00000,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "02-Selected-Lane.png",
+          "name" : "02-Selected-Lane"
+        },
+        {
+          "image-name" : "01-Continuous-Body.svg",
+          "name" : "01-Continuous-Body"
+        }
+      ],
+      "lighting" : "combined",
+      "name" : "Fused resolver body",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [
+      "macOS"
+    ]
+  }
+}
