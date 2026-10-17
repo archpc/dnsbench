@@ -2,13 +2,21 @@ import SwiftUI
 import Charts
 
 /// Sortable, filterable native rankings for the selected run.
+@MainActor
 struct RankingsView: View {
     @Environment(AppModel.self) private var model
     @State private var detail: RunDetail?
+    @State private var loadFailed = false
     @State private var searchText = ""
     @State private var providerFilter: String?
     @State private var sortOrder = [KeyPathComparator(\RankedServer.sortU,
                                                      order: .forward)]
+
+    /// Seeded from the store cache so pane revisit renders the table on the
+    /// first frame instead of flashing the loading state.
+    init(model: AppModel) {
+        _detail = State(initialValue: model.store.cachedDetail(model.selectedRunID))
+    }
 
     private var providers: [String] {
         guard let ranked = detail?.rankedFile?.ranked else { return [] }
@@ -35,9 +43,12 @@ struct RankingsView: View {
         Group {
             if let detail, let ranked = detail.rankedFile {
                 rankedTable(ranked)
-            } else if let id = model.selectedRunID {
-                ProgressView("Loading run \(id)…")
-                    .padding(40)
+            } else if let id = model.selectedRunID, loadFailed {
+                EmptyStateView(symbol: "exclamationmark.triangle",
+                               title: "Couldn't load run",
+                               detail: "No readable ranked.json in \(id).")
+            } else if model.selectedRunID != nil {
+                RunTableSkeleton()
             } else {
                 EmptyStateView(symbol: "list.number",
                                title: "No run selected",
@@ -46,8 +57,10 @@ struct RankingsView: View {
         }
         .task(id: model.selectedRunID) {
             guard let id = model.selectedRunID else { detail = nil; return }
+            loadFailed = false
             detail = nil
             detail = await model.store.loadDetail(id)
+            if detail == nil || detail?.rankedFile == nil { loadFailed = true }
         }
         .navigationTitle("Rankings")
     }
@@ -109,5 +122,71 @@ struct RankingsView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.bar)
+    }
+}
+
+/// Table-shaped placeholder shown on first load of a run (no cached detail).
+/// Mimics the rankings table silhouette instead of a bare centered spinner.
+@MainActor
+private struct RunTableSkeleton: View {
+    @State private var pulse = false
+
+    private let columnWidths: [(CGFloat, Alignment)] = [
+        (140, .leading),    // Resolver
+        (44, .trailing),    // Uncached
+        (44, .trailing),    // Cached
+        (36, .trailing),    // p90
+        (36, .trailing),    // Max
+        (36, .trailing),    // Kern delay
+        (28, .trailing),    // Timeo.
+        (28, .trailing)     // Invalid
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 16) {
+                bar(width: 150, height: 12)
+                bar(width: 30, height: 12)
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            Divider()
+            VStack(spacing: 0) {
+                ForEach(0..<12, id: \.self) { i in
+                    HStack(spacing: 16) {
+                        capsule(width: 16, height: 10)
+                        ForEach(columnWidths.indices, id: \.self) { c in
+                            let w = columnWidths[c]
+                            bar(width: w.0 * 0.8, height: 10)
+                                .frame(width: w.0, alignment: w.1)
+                                .frame(maxWidth: c == 0 ? .infinity : nil,
+                                       alignment: w.1)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    Divider()
+                }
+            }
+            Spacer()
+        }
+        .opacity(pulse ? 0.5 : 1)
+        .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true),
+                   value: pulse)
+        .onAppear { pulse = true }
+        .accessibilityHidden(true)
+    }
+
+    private func bar(width: CGFloat, height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: 3)
+            .fill(.quaternary)
+            .frame(width: width, height: height)
+    }
+
+    private func capsule(width: CGFloat, height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: height / 2)
+            .fill(.quaternary)
+            .frame(width: width, height: height)
     }
 }

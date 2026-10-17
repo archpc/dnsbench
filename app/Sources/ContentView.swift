@@ -27,7 +27,7 @@ struct ContentView: View {
             case .benchmark:
                 BenchmarkView()
             case .rankings:
-                RankingsView()
+                RankingsView(model: model)
             case .explore:
                 ExploreView()
             case .history:

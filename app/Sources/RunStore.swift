@@ -143,6 +143,13 @@ final class RunStore {
         scanError = nil
     }
 
+    /// Synchronous cache probe: powers first-frame hydration when the pane is
+    /// revisited (avoids re-entering the loading state for a cached run).
+    func cachedDetail(_ id: String?) -> RunDetail? {
+        guard let id else { return nil }
+        return detailCache[id]
+    }
+
     /// Full detail without raw samples (cheap; used by tables).
     func loadDetail(_ id: String) async -> RunDetail? {
         if let cached = detailCache[id] { return cached }

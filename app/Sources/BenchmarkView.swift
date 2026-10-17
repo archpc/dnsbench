@@ -157,7 +157,8 @@ struct BenchmarkView: View {
             }
             await model.store.scan()
             if let first = outcome.runDirs.first {
-                model.selectedRunID = first
+                // helper returns absolute run dirs; selection elsewhere uses run IDs
+                model.selectedRunID = URL(fileURLWithPath: first).lastPathComponent
                 model.pane = .rankings
             }
         } catch {
