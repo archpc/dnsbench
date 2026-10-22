@@ -1,6 +1,7 @@
 # DNSBench Phase 0 — Reference Baseline and Spikes: Implementation Plan
 
-Status: DRAFT for review (planning only; nothing in this plan has been executed)
+Status: DRAFT for review (planning only; the only executed item is P0.6's
+E3-approved oracle install, recorded in the spec header)
 Date: 2026-10-22 · Branch: `v2/swift-engine` · Worktree: `/Users/sein/Code/dnsbench-v2`
 Spec: `docs/superpowers/specs/2026-10-21-dnsbench-v2-native-architecture.md` (REV 2)
 GRC research: `docs/research/2026-10-22-grc-v2-rea-report.md` (complete)
@@ -26,9 +27,11 @@ GRC research: `docs/research/2026-10-22-grc-v2-rea-report.md` (complete)
 
 ## P0.1 [OFF] Reference worktree and golden harness scaffolding
 
-* Commands: `git -C ~/Code/dnsbench worktree add ~/.hermes/artifacts/dnsbench-v2/reference python-reference-v1`
-  (read-only reference checkout); in the v2 worktree create `reference/`
-  containing: `harness_wire.py` (emits wire corpus JSONL: each RFC 9267 §2–6
+* No separate reference checkout is needed: `engine/` and `tests/` in this
+  worktree are byte-identical to `python-reference-v1` (verified via
+  `git diff --stat python-reference-v1 -- engine/ tests/` — empty), so the
+  harnesses import the reference code from this worktree directly. In this
+  worktree create `reference/` containing: `harness_wire.py` (emits wire corpus JSONL: each RFC 9267 §2–6
   anti-pattern, the 10 selftest cases, F1–F6 fixtures, plus mutations of valid
   replies), `harness_traces.py` (scenario traces + `random.seed(N)` per window,
   driving `run_interleaved` through the fake-selector/socket/clock harness),
@@ -43,7 +46,9 @@ GRC research: `docs/research/2026-10-22-grc-v2-rea-report.md` (complete)
 * Failure handling: if the fake-selector harness needs to touch reference
   internals, the harness copies the engine modules into `reference/_harness/`
   and patches the copies; the real reference tree stays pristine.
-* Rollback: delete `reference/` + the reference worktree; nothing else changes.
+* Rollback: `git worktree remove` any worktree created under this task, delete
+  `reference/`; nothing else changes. (Note: `git worktree add/remove` writes
+  shared `.git` metadata in `~/Code/dnsbench`.)
 
 ## P0.2 [OFF] Wire-corpus golden generation (reference side)
 
@@ -94,7 +99,8 @@ GRC research: `docs/research/2026-10-22-grc-v2-rea-report.md` (complete)
 ## P0.5 [OFF] CPython RNG replication vectors
 
 * What: emit reference vectors for `random.Random(12345)`: 10,000 × `choice`
-  over a 38-char alphabet, 100 × `shuffle(list)` for n = 8…512, and the exact
+  over the reference's **36-character alphabet `a-z0-9`** (`dnslib.py:188`),
+  100 × `shuffle(list)` for n = 8…512, and the exact
   index stream of a 2,000-resample bootstrap (`rng.choice(meds) for _ in meds`)
   from `stability.py`'s code path. These vectors make the reviewer's 14,950-draw
   claim independently checkable and give Swift's `CPythonRandom` its test set.
@@ -127,8 +133,10 @@ GRC research: `docs/research/2026-10-22-grc-v2-rea-report.md` (complete)
   responder at ladders 1/8/64 with the harness clock (real), recording per-query
   user-latency distribution and loop overhead. No network.
 * Acceptance: baseline report `docs/spikes/p07-loopback-baseline.md` with p50/p99
-  user latency and kernel-rx→user delay (reusing the V2 probe method); establishes
-  the L3 tolerance sanity floor (≤0.25 ms median).
+  user latency and kernel-rx→user delay (reusing the V2 probe method). The L3
+  tolerances (median ≤0.25 ms, p95 ≤1.0 ms) are **pre-registered in the spec and
+  are not retuned** by this task; the baseline only sanity-checks that loopback
+  noise sits below them.
 * Failure handling: responder port collisions → retry on an OS-assigned port.
 * Rollback: report only.
 
@@ -141,9 +149,9 @@ GRC research: `docs/research/2026-10-22-grc-v2-rea-report.md` (complete)
 * Acceptance: `docs/spikes/r2-en0-timestamps.md` with the same bracket statistics
   as V2. Absence of ancillary data on en0 → user-latency-only fallback is
   confirmed as the design default and the spec note updated.
-* Failure handling: resolver unreachable → use any responsive public resolver
-  from the pool; still blocked → report and keep V2 (loopback) as the only
-  evidence.
+* Failure handling: resolver unreachable → retry only against resolvers from
+  the pre-registered `reference/pilot-resolvers.txt` list (P0.10); if the whole
+  list is unreachable, report and keep V2 (loopback) as the only evidence.
 
 ## P0.9 [GATE] QoS comparison (spec §1.4 correction 5)
 
@@ -201,6 +209,44 @@ GRC research: `docs/research/2026-10-22-grc-v2-rea-report.md` (complete)
 * Rollback boundary: tag `v2-phase-0` on the commit series after review
   triage.
 
+## P0.13 [OFF] Storage export/recovery verification tests (spec §5.3)
+
+* What: with the fixture store from P0.7's harness (no engine code), exercise:
+  (a) `kill -9` at random points during batch commits (50 iterations), then
+  reopen + `validate`; (b) export via `wal_checkpoint(TRUNCATE)`-and-close while
+  a read-only connection is open; (c) export via the SQLite backup API under
+  the same reader; (d) open-reader export after crash recovery; (e) status
+  recheck under `LOCK_EX` after a free-lock observation.
+* Commands: `python3 reference/store_probe.py --mode kill|export|recheck --iters N`
+* Artifacts: `docs/spikes/p13-store-probe.md` with pass/fail per mode and
+  committed WAL sizes.
+* Acceptance: every exported file passes `validate`; every crash-recovered file
+  opens and reports its true status; the LOCK_EX recheck never finalizes a file
+  a writer reclaimed.
+* Failure handling: any failure here is a design bug — file it against the spec
+  section, do not paper over it.
+* Rollback: delete probe script + report.
+
+## P0.14 [OFF] V2 probe re-run and commit (spec §0 V2)
+
+* What: re-run the loopback `SCM_TIMESTAMP_MONOTONIC` clock-domain probe
+  (bracket statistics + `CLOCK_UPTIME_RAW` comparison) in this environment and
+  commit script + numbers under `docs/spikes/p14-monotonic-loopback.md`, so V2
+  is no longer "uncommitted throwaway".
+* Acceptance: committed report with the same statistics as V2 (samples, bracket
+  containment, p50/p99 kernel-to-user delay, clock-domain delta range).
+* Rollback: report only.
+
+## Required approvals (consolidated)
+
+| # | Item | Type |
+|---|---|---|
+| A1 | Phase 0 execution as planned (all [OFF] tasks) | plan approval |
+| A2 | P0.9 QoS measurement needs a minimal kqueue-driver skeleton — the first engine code, beyond planning | explicit approval item (not covered by E1-E5) |
+| A3 | P0.8 + P0.10 network items (R2 probe ≤200 queries; noise floor 40,832; pilot ≈4.6k) | network approval, E4-class, itemized |
+| A4 | Full L7 experiment (244,992 queries) | separate approval |
+| A5 | Capped L7 extension (+81,664 queries, only if inconclusive) | separate approval |
+
 ## Unresolved decisions carried into the review
 
 1. QoS class choice (data pending, P0.9) — spec default `.userInitiated`.
@@ -210,5 +256,7 @@ GRC research: `docs/research/2026-10-22-grc-v2-rea-report.md` (complete)
    change.
 5. Pacing-knob defaults (Phase 7) informed by GRC's verified 20 ms/97-cap
    reference points; no commitment yet.
-6. E4 accounting: spikes/pilot query counts above are additive to the
-   285,824-query full experiment and each stays separately approved.
+6. E4 accounting: 40,832 (noise floor) + 4.6k (pilot) + 244,992 (full L7)
+   = 285,824 plus spikes/pilot; the capped L7 extension would add 81,664 more
+   and requires its own approval (A5). Every network item stays separately
+   approved; no open-ended traffic authorization.

@@ -67,8 +67,11 @@ timeouts are not coalesced enough to distort timeout accounting (R1); raw UDP
 sockets work under App Sandbox with `network.client` (R6); a Developer ID
 certificate is available for notarization testing (R7).
 
-**Unknown, and not claimed:** how GRC forces uncached and dotcom lookups, its
-custom-list scoring, its Conclusions logic, and its significance test.
+**Unknown, and not claimed:** GRC's custom-list selection rule and its
+Conclusions logic internals. Previously-unknown GRC behaviors (uncached and
+dotcom construction, significance-test shape) were resolved by the static
+research (report §3.1-3.2, §3.7) and are reflected in §7; the report's own [?]
+items remain unknown.
 
 ---
 
@@ -154,7 +157,11 @@ one that touches sockets. Storage is the only one that touches disk. No
   vs `.userInteractive` for: timing perturbation of loopback probes,
   cancel-to-exit latency, UI responsiveness under load, CPU use, and storage
   interference. Higher priority is not assumed better.
-  Never a Swift-concurrency executor (the thread blocks in `kevent`).
+  Never a Swift-concurrency executor (the thread blocks in `kevent`). The
+  Python reference pins its measurement threads to `QOS_CLASS_USER_INTERACTIVE`
+  (`dnslib2.py:35-45`), so reference-mode runs (L3/L7) pin the Swift engine to
+  the same class to avoid a QoS confound, and the reference setting is P0.9's
+  baseline arm.
   It owns every socket, the kqueue fd and all scheduler state. No locks on the
   hot path.
 * **Output.** The measurement thread appends `ProbeRecord`s to a
@@ -207,7 +214,8 @@ App                                   Worker (dnsbench worker --gen 7)
  │ start_benchmark {job, config, store_path} ───────►│ accepted {job, benchmark_id}
  │◄────────────── progress … (≤10 Hz, latest-wins)   │
  │◄────────────── heartbeat (1 Hz, independent thread)
- │ cancel {job} ────────────────────────────────────►│ cancel_ack {job}
+ │  cancel {job} ────────────────────────────────────►│ cancel_ack {job}
+              (ack due within 10 s; expiry escalates to SIGTERM)
  │◄────────────── finished {job, outcome: cancelled, windows_complete: 2, partial: 1}
  │ shutdown {grace_ms} ─────────────────────────────►│ exits 0
 ```
@@ -233,6 +241,10 @@ App                                   Worker (dnsbench worker --gen 7)
   auto-kills. Finalization is bounded: after `cancel_ack` the worker has 10 s to
   produce `finished`; on expiry it is SIGTERMed and the job becomes
   `interrupted`.
+* Cancellation acknowledgement is bounded: a `cancel` that receives no
+  `cancel_ack` within 10 s escalates to SIGTERM (then SIGKILL 3 s later), and
+  the job ends `interrupted (worker_unresponsive)`. A worker may not sit in
+  `cancel_requested` forever, even while heartbeating.
 * Hung worker (no heartbeat): if no heartbeat arrives for 5 s while busy, the
   state is `unresponsive`. The UI shows it with "Terminate worker". The
   coordinator sends SIGTERM automatically only after 30 s without heartbeat,
@@ -353,9 +365,12 @@ illegal → logged, ignored):
 **Who writes the file status:**
 * `completed`/`cancelled`/`failed`: the worker, inside the transaction that ends
   the job, before it sends `finished`.
-* `interrupted`: never the dead worker. The UI shows the job as interrupted
-  immediately. On disk the file stays `running`, and readers derive
-  "interrupted (not finalized)" from the free writer lock (§5.3).
+* `interrupted`: written by the worker only when it can still act (the
+  `parent_gone` case: the worker is alive, holds the writer lock, and finalizes
+  before exiting). When the worker is already dead or is SIGTERMed mid-drain,
+  nobody writes it: the UI shows the job as interrupted immediately, the file
+  stays `running`, and readers derive "interrupted (not finalized)" from the
+  free writer lock (§5.3).
 * The next worker the coordinator spawns runs `recover` on that file during its
   handshake and records `status_reason` (`worker_lost` with the exit signal, or
   `unresponsive`).
@@ -443,14 +458,15 @@ The reference source is preserved untouched on `python-reference-v1`; the Swift
 reference-mode validator reproduces the reference's accept/reject surface
 **including** F1–F4 acceptance where parity requires it, and the hardened
 behavior is the native-mode default. Every F-case appears in the differential
-corpus both ways.
-  * header;
-  * counts walked exactly (RFC 9267 §6);
-  * names with backward-only pointers, one hop at a time, a hop limit of 127,
-    labels ≤63 and names ≤255 (§2–4);
-  * RR fixed parts and RDLENGTH within bounds (§5);
-  * typed RDATA checks for A (4), AAAA (16), CNAME/NS/PTR (exactly one name);
-  * OPT/EDNS parsed but not required.
+corpus both ways. Reviewer reproduction note (2026-10-22): F1-F4 and F5 were
+independently reproduced in scratch against `python-reference-v1` — recorded as
+reproduced evidence; P0.4 re-verifies in-repo.
+
+Structural parse performs: header; counts walked exactly (RFC 9267 §6); names
+with backward-only pointers, one hop at a time, a hop limit of 127, labels ≤63
+and names ≤255 (§2–4); RR fixed parts and RDLENGTH within bounds (§5); typed
+RDATA checks for A (4), AAAA (16), CNAME/NS/PTR (exactly one name); OPT/EDNS
+parsed but not required.
 * `ReplyValidator.validate(reply:for:) -> ReplyVerdict` implements the probe
   contract:
   * transaction ID match;
@@ -490,13 +506,12 @@ corpus both ways.
   servers. The same class of defect occurred in the Python reference (Pitfall
   #2).
 * **Timing boundaries (defined for parity, correction 3).**
-  * Construction vs send: the reference (`dnslib2._send`) takes t0 **after
-    `qid.next()` and immediately before `build_query`**, so the parity window
-    includes query construction. In reference mode, t0 = the driver's clock read
-    immediately before scheduler-supplied query bytes are handed to `send()`,
-    and the scheduler emits the bytes **before** requesting the send so the
-    same ordering holds. (Native mode may time at the socket boundary; that is
-    an E2-class change, not a parity behavior.)
+  * Construction vs send: the reference (`dnslib2._send`) reads t0 **after
+    `qid.next()` and immediately before `build_query`** — the parity window
+    includes query construction. In reference mode the scheduler emits the
+    query bytes first, then the driver reads t0 immediately before handing them
+    to `send()`, mirroring the reference ordering exactly. (Native mode may time at the socket
+    boundary; that is an E2-class change, not a parity behavior.)
   * GRC v2, by contrast, stamps t0 **after `sendto` returns** and truncates
     elapsed to integer ms, dropping zero-ms samples (report §3.4) — a
     documented difference from both our engines, never copied.
@@ -515,11 +530,11 @@ corpus both ways.
     happened.
   * Event-batch ordering: when one `kevent` batch contains both readable
     sockets and an expiry, **readable events are processed first** (read
-    precedence), then expiries; the Python reference processes its batch in
-    kernel-returned order, so the Phase 0 golden traces record the reference's
-    observed order and the parity fixtures pin both engines to the same order
-    on scripted scenarios. Order differences surface as trace diffs, not as
-    silent tolerance.
+    precedence), then expiries — the same order the reference implements
+    (`dnslib2.py:207-213`: select events drained before the timeout sweep), so
+    the parity fixtures pin the shared read-precedence order on scripted
+    scenarios. Order differences surface as trace diffs, not as silent
+    tolerance.
   * Clock conversion: the timebase is read once per process; ticks→ns is
     integer conversion rounded to nearest (ties up), and the 0.1 ms
     quantization difference vs the reference's float arithmetic is covered by
@@ -530,7 +545,8 @@ corpus both ways.
     and reference parity is restricted to user latency.
   * Kernel latency stays **secondary** (E2a decides promotion later).
   * `latency_user = rx_user − t0_observed` equals the Python reference metric
-    (same clock domain, V2). It is the **primary metric during migration**.
+    (same clock domain, V2; same construction-inclusive boundary). It is the
+    **primary metric during migration**.
   * `latency_kernel = rx_kernel − t0` removes event-loop read delay.
   * Promoting `latency_kernel` to primary is a methodology change, escalated
     after parity (§8, E2a).
@@ -760,11 +776,19 @@ resolver(id INTEGER PRIMARY KEY, address TEXT, port INTEGER, transport TEXT DEFA
   family INTEGER, label TEXT, source TEXT CHECK(source IN ('system','builtin','pool','user','forced_ref','imported')),
   ptr TEXT, provider TEXT, provider_basis TEXT, UNIQUE(address, port, transport))
 window(idx INTEGER PRIMARY KEY, status TEXT CHECK(status IN ('running','complete','cancelled','interrupted','invalid')),
-  started_at TEXT, ended_at TEXT, order_seed INTEGER, label_seed INTEGER, invalid_reason TEXT)
+  started_at TEXT, ended_at TEXT, order_seed INTEGER, label_seed INTEGER, invalid_reason TEXT,
+  backpressure_paused_ms INTEGER DEFAULT 0)
+  -- meta additionally carries last_committed_seq, backlog_records,
+  -- backlog_bytes (updated per commit; surfaced for stalled/interrupted files)
+  -- and anomaly_overflow_count when the anomaly cap is hit
 query(window_idx INTEGER, resolver_id INTEGER, seq INTEGER, kind TEXT, qname TEXT, qtype INTEGER,
-  txid INTEGER, sent_ns INTEGER, rx_kernel_ns INTEGER, rx_user_ns INTEGER,
-  outcome TEXT NOT NULL, rcode INTEGER, ancount INTEGER, batch INTEGER,
+  txid INTEGER, sent_ns INTEGER, t0_observed_ns INTEGER, rx_kernel_ns INTEGER, rx_user_ns INTEGER,
+  outcome TEXT NOT NULL, rcode INTEGER, ancount INTEGER, batch INTEGER, kd_ref_ms REAL,
   PRIMARY KEY(window_idx, resolver_id, seq)) WITHOUT ROWID
+  -- sent_ns = scheduler-requested send; t0_observed_ns = driver's actual
+  -- pre-construction clock read (parity boundary); kd_ref_ms = wall-clock
+  -- kernel delta, null when the ancillary timestamp was missing (matching the
+  -- reference kd behavior)
 anomaly(window_idx INTEGER, resolver_id INTEGER, rx_user_ns INTEGER, kind TEXT, bytes BLOB)  -- strays, malformed
 window_result(window_idx, resolver_id, …)      -- derived per-window stats, tagged with method + engine_version
 aggregate(method TEXT, engine_version TEXT, computed_at TEXT, result_json TEXT)   -- derived, recomputable
@@ -1035,16 +1059,16 @@ Legend:
 | GRC feature | Today (ref) | v2 | Phase | Notes |
 |---|---|---|---|---|
 | Cached lookups | S (15 domains, primed, 50/window) | S | 2 | GRC's list is 50 domains per grc.com/dns/resources.htm as reported by the research subagent (not re-fetched); domain-set size change is methodology (E2d). |
-| Uncached lookups | S (random subdomain of popular domain) | S | 2 | GRC v2 (verified): 26-char lowercase label from a UuidCreate GUID under a **2009-era top-50 list**; SERVFAIL latency recorded as a sample; cached step requires AA=0 on a second consecutive query (report §3.1–3.2). R13 risk stands. |
+| Uncached lookups | S (random subdomain of popular domain) | S | 2 | GRC v2 (verified): 26-char lowercase label from a UuidCreate GUID [V] under a top-50 list whose contents are 2009-era [I, from list contents]; SERVFAIL latency recorded as a sample [V]; cached step requires AA=0 on a second consecutive query [V] (report §3.1–3.2). R13 risk stands. |
 | Dotcom lookups | M | S | 7 | GRC v2 (verified): random 26-char label + `.com`, any rcode timed — resolver→.com-zone path (report §3.2). Independently implementable; methodology addition (E2b). |
 | 250 query sets / multipliers | ≠ windows × 50 | ≠ presets 1/4/8 windows | 5 | Repetition across windows supports window-level uncertainty. |
-| 20 ms query spacing | ≠ ≤1 outstanding/server, interleaved | ≠ (+ optional pacing knob) | 7 | GRC paces **chain starts** 20 ms with a 97-outstanding cap (verified, report §3.4). Reference for our knob design. |
+| 20 ms query spacing | ≠ ≤1 outstanding/server, interleaved | ≠ (+ optional pacing knob) | 7 | GRC paces **chain starts** 20 ms [V] with a 97-outstanding cap [V constant; event-gating semantics [I]] (report §3.4). Reference for our knob design. |
 | Slow-resolver sidelining | M | S | 7 | 50 ms default **verified** (µs-minimum > threshold at 0x424c8a); attempt count "10 opportunities" still [?] (report §3.5). |
 | Reliability (lost queries) | S (to_u/to_c, unreach, fail_u, bad_c) | S | 2/5 | Loss % column + breakdown. |
 | Status: not answered / rejected / no recursion / invalid | P (dead, refused counted) | S | 7 | GRC probes verified: bad-WEB `www.<rand>.com`, bad-COM `<rand>.com`, DNSSEC `isc.org`, rebinding `net*.rebindtest.com` (GRC-controlled zones), connectivity `<rand>.isc.org` vs hardcoded roots (report §3.8). RA-bit check stays ours. |
 | Redirect (bad domain / bad COM / bad WEB) | P (discovery hijack exclusion) | S | 7 | Per-benchmark characterization. |
 | Never replies to bad domains | M | S | 7 | |
-| Rebinding protection ring | M | D | — | GRC uses its own `rebindtest.com` zones per private range, IPv4+IPv6 (report §3.8). DNSBench equivalent needs a controlled zone; deferred. |
+| Rebinding protection ring | M | D | — | GRC uses its own `rebindtest.com` zones, one per private range, IPv4+IPv6 [V names; per-range mapping [I]] (report §3.8). DNSBench equivalent needs a controlled zone; deferred. |
 | DNSSEC test | M | D | 8 | DO-bit queries; AD-flag status. |
 | System resolver detection, pin to top | M | S | 5 | SCDynamicStore, incl. scoped/VPN resolvers labelled and opt-in (§6.2); not a measurement change. |
 | Built-in resolver list | P (4 forced refs + pool) | S curated | 5 | Sourced from provider documentation, versioned. |
@@ -1054,7 +1078,7 @@ Legend:
 | Tabular data | S (rankings table) | S | 5 | |
 | Conclusions | M | ≠ evidence-tagged findings | 5 | GRC logic **?**; own design. |
 | CSV / text export | M | S (+JSON) | 3 CLI / 5 GUI | |
-| 95% significance | ≠ bootstrap over windows, CI bands | S | 1 | GRC method **?**. |
+| 95% significance | ≠ bootstrap over windows, CI bands | S | 1 | GRC: two-sided ~95% z-test on integer-ms means via 16.16 fixed-point sqrt (report §3.7) — shape [V], unit bookkeeping [I]. Ours differs by design. |
 | Ranking order | ≠ uncached median, then cached | S (reference) | 1 | GRC v2 (verified): equally-weighted **mean** of all integer-ms truncated samples, zeros dropped, 95% z-test for "faster" claims (report §3.6–3.7). Deliberately different; E2c. |
 | IPv6 | M | D | 8 | Wire layer AAAA-ready from Phase 1. |
 | DoH / DoT | M | D | 9 | Separate transport; not timed with the UDP engine's precision claims. |
@@ -1062,7 +1086,7 @@ Legend:
 | Progress monitor (counts/%/time) | P | S | 5 | |
 | Page cloning | M | ≠ export image / multiple benchmarks | — | |
 | Command line | S (Python scripts) | S first-class | 3 | |
-| Disconnect detection | M | S | 4 | `NWPathMonitor`; window marked `invalid`. GRC: 10 s last-reply watchdog + suspend dialog (report §3.4); ours differs deliberately. |
+| Disconnect detection | M | S | 4 | `NWPathMonitor`; window marked `invalid`. GRC: 10 s last-reply watchdog + suspend dialog [V]; its changelog claims 20 s [?] — unresolved mismatch (report §3.4); ours differs deliberately. |
 
 Verified GRC behaviors that DNSBench deliberately does **not** copy: TXID-only
 reply matching on unconnected sockets (spoofable; we validate source + question +
@@ -1107,7 +1131,11 @@ The v1 protocol collapsed six pair-level differences into 44 resolver means
 * **Primary test:** paired t-based TOST on D_1…D_6 (df = 5), margin ±δ with
   δ = max(0.5 ms, 2 × Phase-0 noise floor). The noise floor is the median
   absolute per-resolver difference between two same-engine Python runs on the
-  same resolvers. **Maximum acceptable margin: 2.0 ms** — if the noise floor
+  same resolvers — a **single-pair, per-resolver scale**. δ is applied at the
+  D_j scale (44-resolver means) **without** √44 shrinkage: shared network
+  conditions make that averaging optimism unsafe, so the margin is
+  deliberately conservative; the scale relationship is stated here so the two
+  numbers are never confused. **Maximum acceptable margin: 2.0 ms** — if the noise floor
   exceeds 1.5 ms (δ > 2.0), the experiment is declared **inconclusive** before
   running, and the extension rule below applies once. Equivalence at the pair
   level must not hide per-resolver regressions:
@@ -1131,10 +1159,12 @@ The v1 protocol collapsed six pair-level differences into 44 resolver means
     "not evaluable — no qualifying comparisons" and does **not** count as a
     pass. Otherwise zero contradictions are required and the qualifying count
     is reported.
-* **Extension rule (capped, prespecified):** an inconclusive primary result
-  triggers exactly one extension: +2 pairs (8 pairs, 16 runs total) under the
-  same margin. Still inconclusive → **inconclusive**, reported as such. No
-  margin relaxation, ever.
+* **Extension rule (capped, prespecified, separately approved):** an
+  inconclusive primary result triggers exactly one extension: +2 pairs (8
+  pairs, 16 runs total) under the same margin — **+81,664 additional queries
+  beyond the E4 budget, requiring its own explicit approval**. Still
+  inconclusive → **inconclusive**, reported as such. No margin relaxation,
+  ever.
 * **Pilot first:** the full protocol runs only after a small rate-limited pilot
   (plan P0.10) validates targeting, rate limits, and duration; pilot results may
   adjust n and duration but never the margins or acceptance rules.
@@ -1145,7 +1175,9 @@ separates defect-reproducing tests from coverage tests.
 
 **Acceptance criterion (from the brief).** Met when the Swift CLI completes a
 full 4-window benchmark, persists it, passes `validate`, matches L4/L5 exactly
-under fixture input, and L7 passes.
+under fixture input, and **L7 has been executed and reported with its outcome
+stated** — `inconclusive` is an honest outcome, not a failure; it escalates to
+the capped extension approval (E4), never to a relaxed margin.
 
 ---
 
@@ -1164,7 +1196,7 @@ Branching:
 | 0 Baseline | Reference worktree at `python-reference-v1`; `reference/` harness (seeded RNG, injected PTR) that emits golden corpora (wire, traces, analysis outputs) from Python; loopback timing baseline of the Python engine; parser-difference reproduction (F1–F6, plus the reviewer's four cases); MT19937/`shuffle` vector verification; QoS comparison (gated); spikes R1 (timer precision), R2 (monotonic rx timestamps on en0; clock-domain proof vs `CLOCK_UPTIME_RAW`), R5 (fsync and fullfsync jitter), L7 noise floor (2 Python runs); rate-limited pilot design | — | Goldens reproducible by one command; spike reports with numbers and scripts committed in `docs/spikes/`; parser register independently reproduced (or corrected); δ for L7 fixed in writing before Phase 3. Detailed tasks: `docs/superpowers/plans/2026-10-22-dnsbench-phase0.md` |
 | 1 Pure core | SwiftPM package with `DNSWire` + `DNSAnalysis`; MT19937/CPython seeding; rounding | 0 | L1 and L4 exact; RFC 9267 cases all rejected; 10⁶ rounding differential exact; `swift test` green, 0 warnings |
 | 2 Probe engine | `ProbeScheduler`, `KqueueDriver`, timestamps, cancellation, scripted transport | 1 | L2 exact; L3 within tolerances; 500-resolver run OK; cancel→stop p99 ≤20 ms; fd-limit error named, not silent |
-| 3 Store + CLI | `DNSStore`, legacy import, `dnsbench` commands, fixtures, export | 2 | L5 exact; Starlink import reproduces legacy aggregate exactly; L6 crash-injection 200/200; **CLI acceptance criterion met; L7 executed and reported** |
+| 3 Store + CLI | `DNSStore`, legacy import, `dnsbench` commands, fixtures, export | 2 | L5 exact; Starlink import reproduces legacy aggregate exactly; L6 crash-injection 200/200; **CLI acceptance criterion met; L7 executed and reported with its stated outcome** (inconclusive allowed; triggers the capped E4 extension decision) |
 | 4 Worker + coordinator | `dnsbench worker`, IPC, supervisor, state machines; the app gets an engine setting (Python reference / Swift) | 3 | Protocol tests (handshake, versioning, stale gen/seq/job rejection, backpressure, terminal-exactly-once); L6 GUI cases; app usable with either engine |
 | 5 UI redesign | IA, ladder, inspector, inventory + system resolvers, New Benchmark, findings, export, menus, accessibility | 4 | Hermetic snapshot tests on fixture stores (closes the skipped-snapshot gap); XCUITest flows for inspector close/no-samples, run/stop, dir change (closes #11/#12); VoiceOver and keyboard audit checklist |
 | 6 Python retirement | Remove `Resources/python` + `engine/` from the bundle; keep `reference/` for differential CI; merge to `main`; tag `v2.0.0` | 1–5 + your approval | All gates green on a clean checkout; notarization (if R7 resolved) |
@@ -1183,7 +1215,7 @@ the default engine, and the Swift engine is opt-in from Phase 4.
 | R2 | `SCM_TIMESTAMP_MONOTONIC` differs on real interfaces | L / M | Medium (loopback only, V2) | Phase-0 spike on en0; user-latency stays primary regardless |
 | R3 | CPython MT19937/`choice` replication error | L / M | High | CPython test vectors; L4 exact |
 | R4 | Float rounding mismatch vs `round(x,1)` | L / M | Medium | 10⁶-value differential in Phase 1 |
-| R5 | SQLite fsync perturbs timing | M / M | Low | Phase-0 jitter spike; fallback: buffer the window in memory and commit at window end + every 2 s |
+| R5 | SQLite fsync perturbs timing | M / M | Low | Phase-0 jitter spike; degraded-mode fallback (only if the spike forces it): buffer the window in memory, commit at window end + every 2 s — a **labeled degraded mode** with larger, honestly-reported loss windows, never presented as equivalent durability |
 | R6 | Raw UDP under App Sandbox | M / L now | Low | Ship Developer ID (non-sandboxed) first; spike before any App Store plan |
 | R7 | No Developer ID cert → notarization unverified | ? / M | Unknown | Ask (E1); ad-hoc signing until then; never claim notarization untested |
 | R8 | Live parity inconclusive on Starlink | M / M | Medium | More pairs; report inconclusive honestly; optionally a wired vantage |
@@ -1211,7 +1243,9 @@ the default engine, and the Swift engine is opt-in from Phase 4.
   changes).
 * **E4 Live traffic for L7:** 12 runs × 4 windows × 44 resolvers × 116 queries
   = 244,992 queries to public resolvers from your network. The Phase-0 noise
-  floor runs add 2 × 4 × 44 × 116 = 40,832.
+  floor runs add 2 × 4 × 44 × 116 = 40,832. Total 285,824. The capped L7
+  extension (16 runs total) would add 81,664 more and is **a separate approval
+  decision, only if L7 lands inconclusive**.
 * **E5 Branch/worktree plan** in §9, including committing this spec on
   `v2/swift-engine`.
 
@@ -1231,4 +1265,4 @@ the default engine, and the Swift engine is opt-in from Phase 4.
 
 | Date | Reviewer | Result | Disposition |
 |---|---|---|---|
-| 2026-10-22 | User-directed correction round (9 areas) + GRC v2 static research (E6) | Spec revised: L7 redesign (df=5 pair-level estimand, diagnostics, capped extension), parser register F1–F6 with structural/policy split, timing boundaries (construction-inclusive t0, feedback, batch ordering, missing-ancillary rules), storage corrections (backlog/last-committed seq, export via checkpoint/backup, lock recheck), QoS measured not assumed, descriptive-band wording, heartbeat/progress/stall separation + P-1…P-5, resource bounds by records+bytes, XPC rationale fix, deployment target 27.0, scoped-resolver rules. GRC v2 rows updated from the verified static report (`docs/research/2026-10-22-grc-v2-rea-report.md`). |: unseeded global RNG and its consumption order (helper.py:238, dnslib.py:188, dnslib2.py:187); wall-clock `kd` (dnslib.py:143); send-error → unreach (dnslib2.py:96–107); band `prev_hi or` (stability.py:195–200); per-server bootstrap reseed (stability.py:88). Incorporated in §0, §1.4, §2.1, §2.3, §2.4, §3.2–3.4, §5.1, §5.3, §8 (L1, L2, L4, L7), §9 Phase 0, E4. Reviewer independently confirmed the CPython MT19937 `choice` replication over 14,950 draws. |
+| 2026-10-22 | Independent review of Rev 2 (read-only) + user-directed correction round (9 areas) + GRC v2 static research (E6) | 8 P1 + P2 findings, all applied (t0 wording; L7 extension split out of E4; cancel-ack bound; interrupted-writer rule; Phase 3 gate wording; reference QoS pin; plan tasks added; 36-char alphabet; read-before-timeout parity; noise-floor scale; schema fields; §7 label honesty; stale §0; §3.1 structure; §12 wording; REA label/privacy fixes). Spec revised: L7 redesign (df=5 pair-level estimand, diagnostics, capped extension), parser register F1–F6 with structural/policy split, timing boundaries (construction-inclusive t0, feedback, batch ordering, missing-ancillary rules), storage corrections (backlog/last-committed seq, export via checkpoint/backup, lock recheck), QoS measured not assumed, descriptive-band wording, heartbeat/progress/stall separation + P-1…P-5, resource bounds by records+bytes, XPC rationale fix, deployment target 27.0, scoped-resolver rules. GRC v2 rows updated from the verified static report (`docs/research/2026-10-22-grc-v2-rea-report.md`). |: unseeded global RNG and its consumption order (helper.py:238, dnslib.py:188, dnslib2.py:187); wall-clock `kd` (dnslib.py:143); send-error → unreach (dnslib2.py:96–107); band `prev_hi or` (stability.py:195–200); per-server bootstrap reseed (stability.py:88). Incorporated in §0, §1.4, §2.1, §2.3, §2.4, §3.1-3.4, §5.1-5.3, §8 (L1, L2, L4, L7), §9 Phase 0, E4. The reviewer's CPython MT19937 `choice` check (14,950 draws) remains **reported evidence, not yet reproduced in-repo** (P0.5 does so). |
