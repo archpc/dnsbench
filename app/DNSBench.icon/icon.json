@@ -1,27 +1,28 @@
 {
-  "fill" : {
-    "automatic-gradient" : "extended-srgb:0.00000,0.53333,1.00000,1.00000"
-  },
+  "fill" : "system-dark",
   "groups" : [
     {
       "layers" : [
         {
-          "image-name" : "02-Selected-Lane.png",
-          "name" : "02-Selected-Lane"
+          "image-name" : "03-Timing-Mark.svg",
+          "name" : "03-Timing-Mark"
         },
         {
-          "image-name" : "01-Continuous-Body.svg",
-          "name" : "01-Continuous-Body"
+          "image-name" : "02-Server-Trays.svg",
+          "name" : "02-Server-Trays"
+        },
+        {
+          "image-name" : "01-Timer-Case.svg",
+          "name" : "01-Timer-Case"
         }
       ],
-      "lighting" : "combined",
-      "name" : "Fused resolver body",
+      "name" : "Timer and Resolver",
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.5
       },
       "translucency" : {
-        "enabled" : true,
+        "enabled" : false,
         "value" : 0.3
       }
     }
