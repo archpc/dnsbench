@@ -48,12 +48,24 @@ dns-benchmark skill, Pitfall #15).
 ## Verification
 
     /opt/homebrew/bin/python3.15 tests/verify_dnsbench.py
-    # checks: dnslib 9-case parser selftest, engine adapter, dataset invariants,
+    # checks: dnslib 10-case parser selftest, engine adapter, dataset invariants,
     # live server boot, every HTTP endpoint, static assets, SSE stream, run
     # lifecycle (accept / confirm-gate / decline / cancel / run_complete),
     # run-dir isolation, checkpoint preservation, compare endpoint.
     # Exits non-zero on any failure. Spawns and tracks its own server on an
     # ephemeral port; terminates only that tracked subprocess.
+
+Engine and native-app helper suites:
+
+    python3 tests/test_review_fixes.py   # offline: local UDP responder + stubbed engine
+    python3 engine/test_engine.py        # offline: kqueue engine regression gate
+    python3 tests/test_aggregate.py      # offline: multi-window aggregate math
+    # Helper lifecycle suite: its cancel/crash cases run a real n=2 measure, so it
+    # needs a data dir holding a pool.json (default: <repo>/datasets). Example:
+    mkdir -p /tmp/dnsbench-suite && cp <a pool.json> /tmp/dnsbench-suite/
+    python3 tests/test_helper.py --data-dir /tmp/dnsbench-suite
+    # App: (cd app && xcodebuild -scheme DNSBench test); snapshot tests skip
+    # unless <repo>/datasets holds real runs.
 
 The Rust WASM renderer (viz/) was removed 2026-10-16 as unreachable after the
 chart redesign; recover it from tag v0.1.0 if ever needed.
@@ -62,7 +74,7 @@ chart redesign; recover it from tag v0.1.0 if ever needed.
 
 - Engine scripts are imported as-is; correctness rules (validated-response
   checks, NXDOMAIN-valid scoring, prime logging, bad_c counting, reference
-  interleaving, 9-case selftest before every job) belong to the skill.
+  interleaving, 10-case selftest before every job) belong to the skill.
 - Every run writes an isolated `datasets/runs/<UTC-timestamp>/` directory;
   checkpoints are copied aside, never deleted.
 - Cancel terminates only the running benchmark job (cooperative, via a

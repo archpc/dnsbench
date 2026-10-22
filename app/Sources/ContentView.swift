@@ -34,7 +34,9 @@ struct ContentView: View {
                 HistoryView()
             }
         }
-        .inspector(isPresented: .constant(model.selectedIP != nil)) {
+        .inspector(isPresented: Binding(
+            get: { model.selectedIP != nil },
+            set: { if !$0 { model.selectedIP = nil } })) {
             if let ip = model.selectedIP {
                 ResolverInspector(ip: ip)
                     .inspectorColumnWidth(min: 320, ideal: 360)
@@ -93,7 +95,7 @@ struct HelperStatusView: View {
         case .idle: "Idle"
         case .starting: "Starting helper…"
         case .ready: "Helper ready"
-        case .busy: "Measuring…"
+        case .busy: model.benchmark.activeJob == .discovery ? "Discovering…" : "Measuring…"
         case .stopping: "Stopping…"
         case .exited(let s): "Helper exited (\(s))"
         }

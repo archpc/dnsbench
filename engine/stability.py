@@ -97,6 +97,21 @@ def bootstrap_ci(meds, n=BOOTSTRAP_N, seed=BOOTSTRAP_SEED):
     return (stats[int(0.025 * n)], stats[int(0.975 * n)])
 
 
+MIN_CONFIRMATORY_WINDOWS = 4
+
+
+def _notes(nw):
+    """Plain-string caveats the UI must show next to rank bands."""
+    notes = {}
+    if nw < MIN_CONFIRMATORY_WINDOWS:
+        notes["exploratory"] = (
+            f"{nw} window(s): bootstrap CIs over <{MIN_CONFIRMATORY_WINDOWS} "
+            "window medians are degenerate (1 window = point, 2 = range of two "
+            "values). Rank bands are exploratory, not established ties or "
+            "separations.")
+    return notes
+
+
 def aggregate(manifest_path, out=None):
     """Repeated-window analysis. See module docstring for methodology."""
     man = json.load(open(manifest_path))
@@ -149,8 +164,8 @@ def aggregate(manifest_path, out=None):
             if not r or r.get("dead"):
                 continue
             n_w += 1
-            suc_u += len(r.get("uncached", [])) / (len(r.get("uncached", [])) + r.get("to_u", 0)) \
-                if (r.get("uncached") or r.get("to_u")) else 0.0
+            tot_u = len(r.get("uncached", [])) + r.get("to_u", 0) + r.get("fail_u", 0)
+            suc_u += len(r.get("uncached", [])) / tot_u if tot_u else 0.0
             tot_c = len(r.get("cached", [])) + r.get("to_c", 0) + r.get("bad_c", 0)
             suc_c += len(r.get("cached", [])) / tot_c if tot_c else 0.0
         servers.append({
@@ -203,7 +218,8 @@ def aggregate(manifest_path, out=None):
         "methodology": {
             "primary_estimate": "median of per-window medians (window-level, not pooled)",
             "ci": f"bootstrap over windows, {BOOTSTRAP_N} resamples, seed {BOOTSTRAP_SEED}",
-            "rank_bands": "servers merged into one band while 95% CIs overlap (ties)",
+            "rank_bands": "servers merged into one band while 95% CIs overlap "
+                          "(order not statistically resolved; overlap is not equivalence)",
             "providers": "PTR-derived category as identity; unknowns explicit; "
                          "provider estimate = median of member estimates (no count advantage)",
             "regression_flag": f"worst-best window median delta > {reg_threshold:.1f} ms "
@@ -223,6 +239,7 @@ def aggregate(manifest_path, out=None):
             band1, key=lambda s: (s["between_range_ms"], s["u_med"]))[:10]],
         "material_regressions": [s["ip"] for s in servers if s.get("material_regression")],
         "providers": prov, "servers": servers,
+        "notes": _notes(nw),
     }
     out = out or manifest_path.rsplit("/", 1)[0] + "/aggregate.json"
     json.dump(out_rec, open(out, "w"), indent=1)
@@ -233,7 +250,7 @@ def aggregate(manifest_path, out=None):
     print(f"noise floor (ref worst-best): {noise_floor:.2f} ms; "
           f"regression threshold {reg_threshold:.2f} ms")
     print(f"rank bands: {servers[-1]['rank_band']} bands over {len(servers)} servers; "
-          f"band 1 = {len(band1)} servers (statistically tied fastest)")
+          f"band 1 = {len(band1)} servers (fastest band; order not statistically resolved)")
     print("top 12 by median-of-window-medians:")
     for s in servers[:12]:
         print(f"  {s['ip']:>16} med={s['u_med']:>6.1f} wire={s['wire_med'] if s['wire_med'] is not None else '-':>7} "

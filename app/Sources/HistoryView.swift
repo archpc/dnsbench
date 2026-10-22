@@ -43,13 +43,26 @@ struct HistoryView: View {
                         if run.complete {
                             Label("Complete", systemImage: "checkmark.circle")
                                 .foregroundStyle(.secondary)
+                        } else if run.cancelled {
+                            Label("Cancelled", systemImage: "xmark.octagon")
+                                .foregroundStyle(.orange)
                         } else {
                             Label("Partial", systemImage: "exclamationmark.triangle")
                                 .foregroundStyle(.orange)
                         }
                     }
-                    TableColumn("Windows") { run in
-                        Text(run.isWindow ? "w\(run.windowIndex ?? 0)" : "—")
+                    TableColumn("Benchmark") { run in
+                        HStack(spacing: 4) {
+                            Text(run.isWindow
+                                 ? "\(run.windowGroupID) · w\(run.windowIndex ?? 0)"
+                                 : "—")
+                                .monospaced()
+                            if run.aggregateAvailable {
+                                Image(systemName: "chart.bar.doc.horizontal")
+                                    .foregroundStyle(.secondary)
+                                    .help("Aggregate (rank bands) available")
+                            }
+                        }
                     }
                 }
                 .searchable(text: $searchText, prompt: "Filter runs")

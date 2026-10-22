@@ -11,22 +11,34 @@ final class SmokeTests: XCTestCase {
         XCTAssertNil(RunParser.parseRunID("not-a-run"))
     }
 
+    /// Hermetic: builds a fixture data dir (one complete run, one partial)
+    /// instead of depending on whatever the developer's datasets/ holds.
     @MainActor
-    func testRunStoreScanFindsRealRuns() async throws {
-        let store = RunStore()
-        store.setDataDir(URL(fileURLWithPath: "/Users/sein/Code/dnsbench/datasets"))
-        // wait for the async scan to land
-        for _ in 0..<50 {
-            if !store.runs.isEmpty { break }
-            try await Task.sleep(nanoseconds: 100_000_000)
+    func testRunStoreScanFindsRuns() async throws {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("dnsbench-smoke-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let runs = dir.appendingPathComponent("runs")
+        let complete = runs.appendingPathComponent("20261016T215155Z")
+        let partial = runs.appendingPathComponent("20261016T220000Z")
+        for d in [complete, partial] {
+            try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
         }
-        XCTAssertGreaterThan(store.runs.count, 50, "expected real historical runs")
+        try #"{"n_ranked":1,"ranked":[{"ip":"192.0.2.1","u_med":20.5,"c_med":5,"to_u":0,"to_c":0,"bad_c":0,"strays":0}]}"#
+            .write(to: complete.appendingPathComponent("ranked.json"), atomically: true, encoding: .utf8)
+        try (#"{"ip":"192.0.2.1","uncached":[20.5,21],"cached":[5],"to_u":0,"to_c":0,"bad_c":0,"strays":0}"# + "\n")
+            .write(to: complete.appendingPathComponent("deepbench-results.jsonl"), atomically: true, encoding: .utf8)
+        let store = RunStore()
+        store.setDataDir(dir)
+        await store.scan()
+        XCTAssertEqual(store.runs.map(\.id), ["20261016T220000Z", "20261016T215155Z"])
         XCTAssertTrue(store.runs.allSatisfy { $0.timestamp < Date() })
-        let complete = try XCTUnwrap(store.runs.first(where: \.complete))
-        let detail = await store.loadDetail(complete.id)
+        XCTAssertEqual(store.runs.filter(\.complete).map(\.id), ["20261016T215155Z"])
+        let completeRun = try XCTUnwrap(store.runs.first(where: \.complete))
+        let detail = await store.loadDetail(completeRun.id)
         XCTAssertNotNil(detail?.rankedFile, "complete run must parse")
         XCTAssertNotNil(detail?.rankedFile?.ranked.first?.uMed)
-        let samples = await store.loadSamples(complete.id)
+        let samples = await store.loadSamples(completeRun.id)
         XCTAssertFalse(samples.isEmpty)
     }
 

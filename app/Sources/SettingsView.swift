@@ -21,19 +21,15 @@ struct SettingsView: View {
                         Task { await model.store.scan() }
                     }
                 }
-                Text("Historical run data (datasets/runs) is read-only for this " +
-                     "app; measurement writes go through the helper into the " +
-                     "same location.")
+                Text("Run data in \(DataPaths.runs(model.helper.dataDir)) is read-only " +
+                     "for this app; measurement writes go through the helper into " +
+                     "the same location.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Section("Diagnostics") {
                 Button("Restart helper") {
-                    Task {
-                        await model.helper.shutdown()
-                        model.helper.start()
-                        await model.refreshHelperInfo()
-                    }
+                    Task { await model.restartHelper() }
                 }
                 if let ping = model.pingInfo {
                     LabeledContent("Helper", value: "v\(ping.helperVersion), protocol v\(ping.protocolVersion)")
@@ -51,9 +47,9 @@ struct SettingsView: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
-        panel.message = "Choose the DNSBench data directory (contains datasets/runs)."
+        panel.message = "Choose the DNSBench data directory (contains pool.json and runs/)."
         if panel.runModal() == .OK, let url = panel.url {
-            model.setDataDir(url)
+            Task { await model.setDataDir(url) }
             dataDirText = url.path
         }
     }

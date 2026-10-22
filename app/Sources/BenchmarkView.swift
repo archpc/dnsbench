@@ -1,17 +1,9 @@
 import SwiftUI
 
-/// Live benchmark configuration, progress, and cancellation.
+/// Benchmark configuration, live progress, and cancellation. Pure observer of
+/// the app-scoped BenchmarkCoordinator: leaving this pane never affects a run.
 struct BenchmarkView: View {
     @Environment(AppModel.self) private var model
-
-    @State private var n = 16
-    @State private var workers = 60
-    @State private var windows = 3
-    @State private var engine = "kqueue"
-    @State private var timeout = 2.0
-    @State private var running = false
-    @State private var lastError: String?
-    @State private var lastRunDirs: [String] = []
 
     var body: some View {
         HSplitView {
@@ -23,68 +15,95 @@ struct BenchmarkView: View {
         .navigationTitle("Benchmark")
     }
 
+    private var coordinator: BenchmarkCoordinator { model.benchmark }
+
     private var configPane: some View {
-        Form {
+        @Bindable var c = model.benchmark
+        return Form {
             Section("Candidate pool") {
-                Stepper(value: $n, in: 4...150, step: 1) {
-                    LabeledContent("Finalists", value: String(n))
+                Stepper(value: $c.config.n, in: 4...150, step: 1) {
+                    LabeledContent("Finalists", value: String(c.config.n))
                 }
                 LabeledContent("Pool source") {
                     Text(poolSource).font(.caption).foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                 }
+                Button {
+                    coordinator.startDiscovery()
+                } label: {
+                    Label(model.pingInfo?.poolEligible == nil
+                          ? "Build candidate pool…" : "Rebuild candidate pool…",
+                          systemImage: "magnifyingglass.circle")
+                }
+                .disabled(!coordinator.canStartDiscovery)
+                .help("Discovery screens ~60k public resolvers (15–20 minutes, " +
+                      "resumes from checkpoints).")
             }
+            .disabled(coordinator.isRunning)
             Section("Engine") {
-                Picker("Engine", selection: $engine) {
+                Picker("Engine", selection: $c.config.engine) {
                     Text("kqueue (interleaved)").tag("kqueue")
                     Text("thread (baseline)").tag("thread")
                 }
                 .pickerStyle(.radioGroup)
-                Stepper(value: $workers, in: 1...128) {
-                    LabeledContent("Workers (thread engine)", value: String(workers))
+                Stepper(value: $c.config.workers, in: 1...128) {
+                    LabeledContent("Workers (thread engine)", value: String(c.config.workers))
                 }
                 LabeledContent("Timeout") {
-                    TextField("", value: $timeout, format: .number)
+                    TextField("", value: $c.config.timeout, format: .number)
                         .frame(width: 64)
                         .multilineTextAlignment(.trailing)
                 }
             }
+            .disabled(coordinator.isRunning)
             Section("Statistical windows") {
-                Stepper(value: $windows, in: 1...5) {
-                    LabeledContent("Windows", value: String(windows))
+                Stepper(value: $c.config.windows, in: 1...5) {
+                    LabeledContent("Windows", value: String(c.config.windows))
                 }
-                Text(windows == 1
+                Text(c.config.windows == 1
                      ? "Single window: fastest-observed only."
-                     : "\(windows) independent windows produce rank bands (exploratory with <4 windows).")
+                     : "\(c.config.windows) independent windows produce rank bands (exploratory with <4 windows).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            .disabled(coordinator.isRunning)
             Section {
-                if running {
+                if coordinator.isRunning {
                     Button(role: .destructive) {
-                        Task { await model.helper.cancel() }
+                        Task { await coordinator.cancel() }
                     } label: {
-                        Label("Cancel benchmark", systemImage: "stop.fill")
+                        Label("Cancel \(coordinator.activeJob?.rawValue ?? "job")",
+                              systemImage: "stop.fill")
                     }
                     .keyboardShortcut(".", modifiers: .command)
                 } else {
                     Button {
-                        Task { await startBenchmark() }
+                        coordinator.startBenchmark()
                     } label: {
                         Label("Start benchmark", systemImage: "play.fill")
                     }
                     .keyboardShortcut("r", modifiers: .command)
-                    .disabled(model.pingInfo == nil)
+                    .disabled(coordinator.startBlockedReason != nil)
+                    if let reason = coordinator.startBlockedReason {
+                        Text(reason)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                if let lastError {
-                    Text(lastError)
+                if let err = coordinator.lastError {
+                    Text(err)
                         .font(.caption)
                         .foregroundStyle(.red)
+                        .textSelection(.enabled)
                 }
-                if !lastRunDirs.isEmpty {
-                    Text("Output: \(lastRunDirs.joined(separator: ", "))")
+                if !coordinator.lastRunDirs.isEmpty {
+                    Text("Output: \(coordinator.lastRunDirs.joined(separator: ", "))")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                         .textSelection(.enabled)
+                    if !coordinator.isRunning {
+                        Button("Show Rankings") { model.pane = .rankings }
+                    }
                 }
             }
         }
@@ -93,17 +112,20 @@ struct BenchmarkView: View {
     }
 
     private var poolSource: String {
+        let path = DataPaths.pool(model.helper.dataDir)
         if let e = model.pingInfo?.poolEligible {
-            return "datasets/pool.json — \(e) eligible"
+            return "\(path) — \(e) eligible"
         }
-        return "datasets/pool.json — unknown (helper offline)"
+        return model.pingInfo == nil
+            ? "\(path) — unknown (helper offline)"
+            : "\(path) — missing"
     }
 
     private var progressPane: some View {
         VStack(alignment: .leading, spacing: 12) {
             let p = model.helper.progress
-            if running {
-                Text(p.command.map { "Running: \($0)" } ?? "Working…")
+            if let job = coordinator.activeJob {
+                Text("Running: \(job.rawValue)")
                     .font(.title3.weight(.medium))
                 if p.windowTotal > 0 {
                     LabeledContent("Window",
@@ -122,10 +144,14 @@ struct BenchmarkView: View {
                 LabeledContent("Queries recorded",
                                value: String(p.queryCount))
                     .monospacedDigit()
-                if let t0 = p.startedAt {
-                    LabeledContent("Elapsed",
-                                   value: Duration.seconds(-t0.timeIntervalSinceNow)
-                                       .formatted(.time(pattern: .minuteSecond)))
+                if let t0 = coordinator.startedAt {
+                    // ticks on its own; progress events stop during aggregation
+                    TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                        LabeledContent("Elapsed",
+                                       value: Duration.seconds(ctx.date.timeIntervalSince(t0))
+                                           .formatted(.time(pattern: .minuteSecond)))
+                            .monospacedDigit()
+                    }
                 }
                 Spacer()
             } else {
@@ -137,32 +163,5 @@ struct BenchmarkView: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private func startBenchmark() async {
-        running = true
-        lastError = nil
-        lastRunDirs = []
-        defer { running = false }
-        if !model.helper.isRunning { model.helper.start() }
-        do {
-            let outcome = try await model.helper.measure(
-                n: n, workers: workers, windows: windows,
-                engine: engine, timeout: timeout)
-            if outcome.cancelled {
-                lastRunDirs = outcome.runDirs
-                lastError = "Cancelled — partial run data preserved."
-            } else {
-                lastRunDirs = outcome.runDirs
-            }
-            await model.store.scan()
-            if let first = outcome.runDirs.first {
-                // helper returns absolute run dirs; selection elsewhere uses run IDs
-                model.selectedRunID = URL(fileURLWithPath: first).lastPathComponent
-                model.pane = .rankings
-            }
-        } catch {
-            lastError = error.localizedDescription
-        }
     }
 }

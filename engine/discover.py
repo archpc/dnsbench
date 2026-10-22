@@ -54,14 +54,29 @@ def fetch_master(path="master-ipv4.txt"):
     return len(seen)
 
 
+def load_checkpoint(path):
+    """Records of an append-only JSONL checkpoint. A torn final line (process
+    killed mid-write) is truncated off, so the record is simply re-probed and
+    the next append starts on a fresh line. Raises FileNotFoundError."""
+    with open(path, "rb") as f:
+        data = f.read()
+    good_end = data.rfind(b"\n") + 1
+    if good_end != len(data):
+        with open(path, "r+b") as f:
+            f.truncate(good_end)
+    out = []
+    for line in data[:good_end].splitlines():
+        if line.strip():
+            out.append(json.loads(line))
+    return out
+
+
 def liveness():
     """Stage 1: one A query per candidate; checkpointed, resumable."""
     ips = [l.strip() for l in open("master-ipv4.txt") if l.strip()]
     done = set()
     try:
-        with open("live-phase1.jsonl") as f:
-            for line in f:
-                done.add(json.loads(line)["ip"])
+        done = {r["ip"] for r in load_checkpoint("live-phase1.jsonl")}
     except FileNotFoundError:
         pass
     todo = [ip for ip in ips if ip not in done]
@@ -113,18 +128,16 @@ def liveness():
     for t in threads:
         t.join()
     fw.close()
-    alive = sum(1 for line in open("live-phase1.jsonl") if json.loads(line)["alive"])
+    alive = sum(1 for r in load_checkpoint("live-phase1.jsonl") if r["alive"])
     print(f"LIVENESS COMPLETE: {alive} alive", flush=True)
 
 
 def screening():
     """Stage 2: corrected screening (NXDOMAIN valid, hijack exclusion, per-query log)."""
-    alive = [json.loads(l)["ip"] for l in open("live-phase1.jsonl") if json.loads(l)["alive"]]
+    alive = [r["ip"] for r in load_checkpoint("live-phase1.jsonl") if r["alive"]]
     done = set()
     try:
-        with open("phase2b-results.jsonl") as f:
-            for line in f:
-                done.add(json.loads(line)["ip"])
+        done = {r["ip"] for r in load_checkpoint("phase2b-results.jsonl")}
     except FileNotFoundError:
         pass
     todo = [ip for ip in alive if ip not in done]

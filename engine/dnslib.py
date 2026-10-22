@@ -2,7 +2,7 @@
 """Shared DNS wire code for the dns-benchmark skill (stdlib only).
 Full response validation per Pitfall #3: txID + question name + QTYPE/QCLASS(A/IN)
 + TC-bit rejection + source IP AND source port 53.
-Run selftest() offline (9 crafted cases incl. truncation) before any measurement run.
+Run selftest() offline (10 crafted cases incl. truncation) before any measurement run.
 """
 import random
 import socket
@@ -48,6 +48,8 @@ def parse_reply(resp, want_qname, want_qid):
     if flags & 0x0200:
         return None  # truncated reply
     qd, an = struct.unpack('>HH', resp[4:8])
+    if qd != 1:
+        return None  # our queries carry exactly one question; replies echo it
     i = 12
     labels = []
     for _ in range(qd):
@@ -69,7 +71,53 @@ def parse_reply(resp, want_qname, want_qid):
         return None
     if qtype != 1 or qclass != 1:
         return None
+    # every advertised answer RR must be present and complete: a header that
+    # claims answers the datagram does not carry is malformed, not a success
+    for _ in range(an):
+        i = _name_end(resp, i)
+        if i is None or i + 10 > len(resp):
+            return None
+        rtype, rclass, _ttl, rdlen = struct.unpack('>HHIH', resp[i:i + 10])
+        rd, i = i + 10, i + 10 + rdlen
+        if i > len(resp):
+            return None
+        if rclass == 1 and rtype == 1 and rdlen != 4:
+            return None  # IN/A RDATA is exactly one IPv4 address
+        if rtype == 5 and _name_end(resp, rd, i) != i:
+            return None  # CNAME RDATA must be exactly one valid name
     return (flags & 0xF, an)
+
+
+def _name_end(resp, i, end=None):
+    """Validate a (possibly compressed) name starting at i and return the
+    offset just past it in the original byte stream, or None if malformed.
+    In-place labels must stay below `end` (default: packet end); compression
+    pointers must point strictly backwards (RFC 1035 only allows prior
+    occurrences), which also rules out loops; total length <= 255."""
+    limit = len(resp) if end is None else end
+    pos, after, total = i, None, 0
+    while True:
+        if pos >= limit:
+            return None
+        b = resp[pos]
+        if b == 0:
+            return pos + 1 if after is None else after
+        if b & 0xC0 == 0xC0:
+            if pos + 2 > limit:
+                return None
+            target = ((b & 0x3F) << 8) | resp[pos + 1]
+            if target >= pos:
+                return None  # forward/self pointer: out of bounds or a loop
+            if after is None:
+                after = pos + 2
+            pos, limit = target, len(resp)
+            continue
+        if b & 0xC0:
+            return None  # reserved label types
+        total += 1 + b
+        if total > 255:
+            return None
+        pos += 1 + b
 
 
 def parse_kts(control):
@@ -142,15 +190,20 @@ def rand_label(n=14):
 
 
 def selftest():
-    """Offline parser suite: 9 crafted cases incl. truncation. Returns (passed, total)."""
+    """Offline parser suite: 10 crafted cases incl. truncation. Returns (passed, total)."""
     name, qid = "www.google.com", 42
 
-    def mkresp(qid_, qtype=1, qclass=1, tc=False, qr=True, rcode=0, an=1, trim=0):
+    def mkresp(qid_, qtype=1, qclass=1, tc=False, qr=True, rcode=0, an=1, trim=0,
+               body=None):
         flags = (0x8000 if qr else 0) | (0x0200 if tc else 0) | rcode
         hdr = struct.pack('>HHHHHH', qid_, flags, 1, an, 0, 0)
         qname = b'\x03www\x06google\x03com\x00'
         pkt = hdr + qname + struct.pack('>HH', qtype, qclass)
-        return pkt[:len(pkt) - trim] if trim else pkt
+        if trim:
+            return pkt[:len(pkt) - trim]
+        if body is None:  # one complete A RR per advertised answer
+            body = (struct.pack('>HHHIH', 0xC00C, 1, 1, 60, 4) + b'\x01\x02\x03\x04') * an
+        return pkt + body
 
     cases = [
         ("valid A/IN", mkresp(qid), name, True),
@@ -162,6 +215,7 @@ def selftest():
         ("wrong name", mkresp(qid), "other.example.com", False),
         ("SERVFAIL passes (timed, flagged later)", mkresp(qid, rcode=2), name, True),
         ("truncated question", mkresp(qid, trim=4), name, False),
+        ("advertised answer missing", mkresp(qid, an=1, body=b''), name, False),
     ]
     passed = 0
     for label, resp, want_name, expect in cases:

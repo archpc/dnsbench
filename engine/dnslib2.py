@@ -56,7 +56,8 @@ class _St:
         self.t0 = None       # send ns (CLOCK_UPTIME_RAW) while outstanding
         self.qid = None      # txid of outstanding query
         self.res = {"ip": ip, "uncached": [], "cached": [], "to_u": 0, "to_c": 0,
-                    "bad_c": 0, "strays": 0, "unreach": 0, "kdeltas": []}
+                    "fail_u": 0, "bad_c": 0, "strays": 0, "unreach": 0,
+                    "kdeltas": []}
         self.dead = False
 
 
@@ -144,7 +145,8 @@ class _Engine:
             kd = dnslib.kdelta_ms(anc)
         # only latency-bearing phases contribute to the server kdeltas list
         # (matches the thread engine; per-query "kd" stays in the JSONL for all)
-        if kd is not None and kind in ("uncached", "cached"):
+        if kd is not None and kind in ("uncached", "cached") \
+                and not (kind == "uncached" and r[0] not in (0, 3)):
             st.res["kdeltas"].append(kd)
         self._complete(st, fw, kind, name, ms, r[0], r[1], kd, batch)
 
@@ -168,8 +170,10 @@ class _Engine:
         if kind == "uncached":
             if rc == -2 or rc == -3:
                 res["to_u"] += 1
-            else:
+            elif rc in (0, 3):  # NOERROR / NXDOMAIN: a real resolution
                 res["uncached"].append(round(ms, 1))
+            else:  # SERVFAIL, REFUSED, other: failed fast, not fast
+                res["fail_u"] += 1
         elif kind == "cached":
             if rc == -2 or rc == -3:
                 res["to_c"] += 1
@@ -178,13 +182,15 @@ class _Engine:
             else:
                 res["bad_c"] += 1  # zero-answer NOERROR etc.: recorded, not dropped
 
-    def run(self, states, fw, qid):
+    def run(self, states, fw, qid, cancel=None):
         order = list(states)
         random.shuffle(order)
         n = len(order)
         si = 0
         try:
             while True:
+                if cancel is not None and cancel.is_set():
+                    break  # cooperative cancel: outstanding probes abandoned
                 for k in range(n):
                     st = order[(si + k) % n]
                     if st.dead or st.t0 is not None or st.ti >= len(st.tasks):
@@ -212,7 +218,7 @@ class _Engine:
 
 
 def run_interleaved(specs, fw, timeout=None, netsvc=None, collect_krx=True,
-                    qid=None, port=53):
+                    qid=None, port=53, cancel=None):
     """Run the deep-bench task lists of all servers in ONE kqueue event loop.
 
     specs: list of (ip, tasks); tasks = [(kind, name), ...] in strict per-server
@@ -239,7 +245,7 @@ def run_interleaved(specs, fw, timeout=None, netsvc=None, collect_krx=True,
     gc.freeze()
     gc.disable()
     try:
-        eng.run(states, fw, qid)
+        eng.run(states, fw, qid, cancel=cancel)
     finally:
         gc.enable()
     records.extend(st.res for st in states)

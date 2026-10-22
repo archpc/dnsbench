@@ -71,7 +71,7 @@ struct ExploreView: View {
                     }
                 }
                 .navigationTitle("Explore — \(runID)")
-                .task(id: runID) {
+                .task(id: model.selectedRunKey) {
                     loading = true
                     queries = await model.store.loadQueries(runID)
                     loading = false

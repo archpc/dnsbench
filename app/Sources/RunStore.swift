@@ -15,6 +15,7 @@ struct RunSummary: Identifiable, Hashable, Sendable {
     var nRanked: Int?
     var engine: String?
     var aggregateAvailable: Bool
+    var cancelled: Bool = false
 }
 
 struct RunDetail: Sendable {
@@ -27,7 +28,8 @@ struct RunDetail: Sendable {
 }
 
 enum RunParser {
-    /// Parses "20261016T215155Z[_wN]"; returns nil for non-conforming names.
+    /// Parses "20261016T215155Z[-k][_wN]" (the helper appends -k on a
+    /// same-second collision); returns nil for non-conforming names.
     static func parseRunID(_ id: String) -> (date: Date, window: Int?)? {
         var base = id
         var window: Int?
@@ -36,12 +38,59 @@ enum RunParser {
             base = String(id[..<r.lowerBound])
             window = w
         }
+        if let dash = base.lastIndex(of: "-") {
+            let suffix = base[base.index(after: dash)...]
+            guard !suffix.isEmpty, suffix.allSatisfy(\.isASCII), Int(suffix) != nil
+            else { return nil }
+            base = String(base[..<dash])
+        }
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = TimeZone(identifier: "UTC")
         f.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
         guard let d = f.date(from: base) else { return nil }
         return (d, window)
+    }
+
+    /// Window-dir name -> (benchmark ID, aggregate file) from the run-group
+    /// files in runs/: manifests `windows-<id>.json`, per-benchmark aggregates
+    /// `windows-<id>.aggregate.json`, and the legacy shared `aggregate.json`
+    /// (whose "windows"/"manifest" fields identify its benchmark).
+    static func groupIndex(runsDir: URL) -> [String: (group: String, aggregate: URL?)] {
+        struct Manifest: Decodable { var windows: [String] }
+        struct AggHead: Decodable { var windows: [String]; var manifest: String? }
+        var out: [String: (group: String, aggregate: URL?)] = [:]
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: runsDir.path)) ?? []
+        func groupID(fromManifestName n: String) -> String {
+            var s = n
+            if s.hasPrefix("windows-") { s.removeFirst("windows-".count) }
+            if s.hasSuffix(".json") { s.removeLast(".json".count) }
+            return s
+        }
+        for n in names where n.hasPrefix("windows-") && n.hasSuffix(".json")
+            && !n.hasSuffix(".aggregate.json") {
+            guard let m = json(Manifest.self, at: runsDir.appendingPathComponent(n))
+            else { continue }
+            let g = groupID(fromManifestName: n)
+            for w in m.windows {
+                let id = URL(fileURLWithPath: w).lastPathComponent
+                out[id] = (g, out[id]?.aggregate)
+            }
+        }
+        for n in names where n == "aggregate.json" || n.hasSuffix(".aggregate.json") {
+            let url = runsDir.appendingPathComponent(n)
+            guard let a = json(AggHead.self, at: url) else { continue }
+            let fallback = n == "aggregate.json"
+                ? a.manifest.map { groupID(fromManifestName: URL(fileURLWithPath: $0).lastPathComponent) }
+                : Optional(String(n.dropLast(".aggregate.json".count))
+                    .replacingOccurrences(of: "windows-", with: ""))
+            for w in a.windows {
+                let id = URL(fileURLWithPath: w).lastPathComponent
+                let g = out[id]?.group ?? fallback ?? id.components(separatedBy: "_w")[0]
+                out[id] = (g, url)
+            }
+        }
+        return out
     }
 
     static func json<T: Decodable>(_ type: T.Type, at url: URL) -> T? {
@@ -116,6 +165,7 @@ final class RunStore {
             guard let names = try? fm.contentsOfDirectory(atPath: dir.path) else {
                 return out
             }
+            let groups = RunParser.groupIndex(runsDir: dir)
             for name in names.sorted().reversed() {
                 let runURL = dir.appendingPathComponent(name)
                 var isDir: ObjCBool = false
@@ -129,16 +179,26 @@ final class RunStore {
                     timestamp: parsed.date,
                     isWindow: parsed.window != nil,
                     windowIndex: parsed.window,
-                    windowGroupID: parsed.window == nil
-                        ? name : String(name.split(separator: "_")[0]),
+                    windowGroupID: groups[name]?.group ?? (parsed.window == nil
+                        ? name : name.components(separatedBy: "_w")[0]),
                     complete: ranked != nil,
                     nRanked: ranked?.nRanked,
                     engine: RunParser.engineHint(runURL: runURL),
-                    aggregateAvailable: fm.fileExists(
-                        atPath: runURL.appendingPathComponent("aggregate.json").path)))
+                    aggregateAvailable: groups[name]?.aggregate != nil,
+                    cancelled: fm.fileExists(
+                        atPath: runURL.appendingPathComponent("cancelled.json").path)))
             }
             return out
         }.value
+        // Invalidate cached detail/samples for runs whose on-disk state changed
+        // (e.g. a partial window completed, got cancelled, or gained an
+        // aggregate) or that disappeared, so a rescan never serves stale data.
+        let fresh = Dictionary(summaries.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let previous = Dictionary(runs.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        for id in Set(detailCache.keys).union(samplesCache.keys) {
+            let known = detailCache[id]?.summary ?? previous[id]
+            if fresh[id] == nil || known != fresh[id] { dropCache(for: id) }
+        }
         runs = summaries
         scanError = nil
     }
@@ -160,8 +220,10 @@ final class RunStore {
         let detail: RunDetail? = await Task.detached(priority: .userInitiated) {
             let ranked = RunParser.json(RankedFile.self,
                                         at: runURL.appendingPathComponent("ranked.json"))
-            let aggregate = RunParser.json(AggregateRecord.self,
-                                           at: runURL.appendingPathComponent("aggregate.json"))
+            let group = RunParser.groupIndex(runsDir: dir)[id]
+            let aggregate = group?.aggregate.flatMap {
+                RunParser.json(AggregateRecord.self, at: $0)
+            }
             let pool = RunParser.json(PoolFile.self,
                                       at: runURL.appendingPathComponent("checkpoint-pool.json"))
             var isDir: ObjCBool = false
@@ -171,11 +233,13 @@ final class RunStore {
             let summary = RunSummary(
                 id: id, timestamp: parsed.date,
                 isWindow: parsed.window != nil, windowIndex: parsed.window,
-                windowGroupID: parsed.window == nil
-                    ? id : String(id.split(separator: "_")[0]),
+                windowGroupID: group?.group ?? (parsed.window == nil
+                    ? id : id.components(separatedBy: "_w")[0]),
                 complete: ranked != nil, nRanked: ranked?.nRanked,
                 engine: RunParser.engineHint(runURL: runURL),
-                aggregateAvailable: aggregate != nil)
+                aggregateAvailable: aggregate != nil,
+                cancelled: FileManager.default.fileExists(
+                    atPath: runURL.appendingPathComponent("cancelled.json").path))
             return RunDetail(summary: summary, rankedFile: ranked,
                              samples: [], aggregate: aggregate,
                              poolMeta: pool?.meta)
@@ -190,12 +254,10 @@ final class RunStore {
         guard let runsDir else { return [] }
         let url = runsDir.appendingPathComponent(id)
             .appendingPathComponent("deepbench-results.jsonl")
-        let dir = runsDir
         let samples: [ServerSamples] = await Task.detached(priority: .utility) {
             RunParser.jsonLines(ServerSamples.self, at: url)
         }.value
         samplesCache[id] = samples
-        _ = dir
         return samples
     }
 
@@ -205,7 +267,9 @@ final class RunStore {
         let url = runsDir.appendingPathComponent(id)
             .appendingPathComponent("deepbench-perquery.jsonl")
         return await Task.detached(priority: .utility) {
-            RunParser.jsonLines(QueryRecord.self, at: url, limit: limit)
+            var rows = RunParser.jsonLines(QueryRecord.self, at: url, limit: limit)
+            for i in rows.indices { rows[i].seq = i }
+            return rows
         }.value
     }
 

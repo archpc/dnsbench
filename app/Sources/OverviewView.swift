@@ -3,8 +3,7 @@ import SwiftUI
 // MARK: - helpers
 
 private func medOf(_ r: (name: String, med: [Double], n: Int)) -> Double {
-    guard !r.med.isEmpty else { return .infinity }
-    return r.med[r.med.count / 2]
+    median(r.med) ?? .infinity
 }
 
 struct OverviewView: View {
@@ -17,6 +16,9 @@ struct OverviewView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         headline(ranked)
+                        if let agg = latest.aggregate {
+                            aggregateSection(agg)
+                        }
                         providerSection(ranked)
                         caveatSection
                     }
@@ -29,12 +31,23 @@ struct OverviewView: View {
             }
         }
         .navigationTitle("Overview")
-        .task(id: model.store.runs.first(where: \.complete)?.id) {
-            let id = model.selectedRunID
-                ?? model.store.runs.first(where: \.complete)?.id
-            guard let id else { latest = nil; return }
+        .task(id: model.store.runs.first {
+            $0.id == Self.runID(selected: model.selectedRunID, runs: model.store.runs)
+        }) {
+            guard let id = Self.runID(selected: model.selectedRunID,
+                                      runs: model.store.runs)
+            else { latest = nil; return }
             latest = await model.store.loadDetail(id)
         }
+    }
+
+    /// The run the Overview describes: the selection, else the newest complete.
+    static func runID(selected: String?, runs: [RunSummary]) -> String? {
+        selected ?? runs.first(where: \.complete)?.id
+    }
+
+    static func title(runID: String, runs: [RunSummary]) -> String {
+        runs.first(where: \.complete)?.id == runID ? "Latest run: \(runID)" : "Run \(runID)"
     }
 
     @ViewBuilder
@@ -44,7 +57,7 @@ struct OverviewView: View {
             .prefix(5)
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Latest run: \(latest?.summary.id ?? "")")
+                Text(Self.title(runID: latest?.summary.id ?? "", runs: model.store.runs))
                     .font(.title2.weight(.semibold))
                 Spacer()
                 Text("\(ranked.nRanked ?? ranked.ranked.count) resolvers")
@@ -67,10 +80,44 @@ struct OverviewView: View {
                 .contentShape(Rectangle())
                 .onTapGesture { model.selectedIP = s.ip }
             }
-            Text("Fastest observed, single window — not a statistically established ranking.")
+            Text("Fastest observed in this window — not a statistically established ranking.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    @ViewBuilder
+    private func aggregateSection(_ agg: AggregateRecord) -> some View {
+        let band1 = agg.servers.filter { $0.rankBand == 1 }
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Fastest band: not statistically resolved (\(agg.windows.count) windows)")
+                .font(.headline)
+            Text("95% CIs overlap within the band, so these resolvers cannot be " +
+                 "ordered from this data. Overlap does not prove they are equivalent.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            ForEach(band1.prefix(10)) { s in
+                HStack {
+                    Text(s.ip).monospaced()
+                    Text(s.provider).font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    if let ci = s.ci95, ci.count == 2 {
+                        Text("95% CI \(Fmt.ms1(ci[0]))–\(Fmt.ms1(ci[1]))")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Text("med \(Fmt.ms1(s.uMed))").monospacedDigit()
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { model.selectedIP = s.ip }
+            }
+            if let note = agg.notes?["exploratory"] {
+                Label(note, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(12)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
     }
 
     @ViewBuilder

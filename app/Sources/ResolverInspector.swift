@@ -10,6 +10,7 @@ struct ResolverInspector: View {
 
     @State private var samples: ServerSamples?
     @State private var queries: [QueryRecord] = []
+    @State private var loaded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -26,14 +27,22 @@ struct ResolverInspector: View {
                     }
                     .padding(14)
                 }
+            } else if loaded {
+                // partial/cancelled run, or resolver absent from this run
+                EmptyStateView(symbol: "questionmark.folder",
+                               title: "No samples",
+                               detail: "\(ip) has no per-server samples in " +
+                                       "\(model.selectedRunID ?? "the selected run").")
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .task(id: "\(model.selectedRunID ?? "")#\(ip)") {
+        .task(id: "\(model.selectedRunKey)#\(ip)") {
             samples = nil
             queries = []
+            loaded = false
+            defer { loaded = true }
             guard let runID = model.selectedRunID else { return }
             async let s = model.store.loadSamples(runID)
             let q = await model.store.loadQueries(runID, limit: 60_000)
@@ -48,9 +57,13 @@ struct ResolverInspector: View {
             Text(ip)
                 .font(.title3.monospaced().weight(.semibold))
                 .textSelection(.enabled)
+            if let ptr = rankedEntry?.ptr, ptr != "?" {
+                Text(ptr).font(.caption.monospaced()).foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
             if let s = samples {
-                if let ptr = s.engine {
-                    Text("engine: \(ptr)").font(.caption).foregroundStyle(.secondary)
+                if let engine = s.engine {
+                    Text("engine: \(engine)").font(.caption).foregroundStyle(.secondary)
                 }
                 Text(identityNote)
                     .font(.caption)
@@ -58,6 +71,11 @@ struct ResolverInspector: View {
             }
         }
         .padding(12)
+    }
+
+    private var rankedEntry: RankedServer? {
+        model.store.cachedDetail(model.selectedRunID)?.rankedFile?.ranked
+            .first { $0.ip == ip }
     }
 
     /// Honest provider-identity label (PTR-derived = provisional).
@@ -74,7 +92,7 @@ struct ResolverInspector: View {
             Text("\(queries.count) recorded · \(timeouts) timed out · showing last \(min(200, rows.count))")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Table(queriesTable(rows)) {
+            Table(Array(rows.reversed())) {
                 TableColumn("Kind") { r in Text(r.kind).font(.caption) }
                 TableColumn("ms") { r in
                     Text(Fmt.ms1(r.ms)).monospacedDigit()
@@ -91,24 +109,6 @@ struct ResolverInspector: View {
                 }
             }
             .frame(height: 220)
-        }
-    }
-
-    private struct QRow: Identifiable {
-        let id = UUID()
-        let kind: String
-        let ms: Double?
-        let rcode: Int
-        let an: Int
-        let kd: Double?
-
-        var isTimeout: Bool { rcode == -2 }
-        var isValidAnswer: Bool { rcode == 0 && an > 0 }
-    }
-
-    private func queriesTable(_ rows: ArraySlice<QueryRecord>) -> [QRow] {
-        rows.reversed().map {
-            QRow(kind: $0.kind, ms: $0.ms, rcode: $0.rcode, an: $0.an, kd: $0.kd)
         }
     }
 
@@ -150,6 +150,7 @@ struct ResolverStatsPanel: View {
             statCell("Samples", "u \(s.uncached.count) / c \(s.cached.count)")
             statCell("Timeouts", "\(s.toU + s.toC)")
             statCell("Invalid cached", String(s.badC))
+            statCell("Uncached failures", String(s.failU ?? 0))
         }
     }
 

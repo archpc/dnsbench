@@ -5,17 +5,28 @@ import SwiftUI
 struct RunTable: View {
     let rows: [RankedServer]
     let ranked: RankedFile
+    /// ip -> aggregate rank band (multi-window benchmarks only).
+    var bands: [String: Int] = [:]
     @Binding var selection: String?
     @Binding var sortOrder: [KeyPathComparator<RankedServer>]
 
+    /// Rank by uncached median over the whole run (not the filtered rows),
+    /// computed once per render instead of re-sorting for every row.
+    static func rankPositions(_ servers: [RankedServer]) -> [String: Int] {
+        var out: [String: Int] = [:]
+        for (i, s) in servers.sorted(by: { $0.sortU < $1.sortU }).enumerated() {
+            out[s.ip] = i + 1
+        }
+        return out
+    }
+
     var body: some View {
+        let ranks = Self.rankPositions(ranked.ranked)
         Table(rows, selection: $selection, sortOrder: $sortOrder) {
-            TableColumn("#") { row in
-                Text(rankPosition(row))
-                    .foregroundStyle(.tertiary)
-                    .monospacedDigit()
+            TableColumn("#") { (row: RankedServer) in
+                rankCell(rank: ranks[row.ip], band: bands[row.ip])
             }
-            .width(28)
+            .width(bands.isEmpty ? 28 : 56)
             TableColumn("Resolver", value: \.ip) { row in
                 resolverCell(row)
             }
@@ -37,13 +48,29 @@ struct RunTable: View {
             TableColumn("Timeo.", value: \.totalTimeouts) { row in
                 timeoutCell(row)
             }
-            TableColumn("Invalid", value: \.badC) { row in
+            TableColumn("Invalid", value: \.totalInvalid) { row in
                 invalidCell(row)
             }
             TableColumn("Provider", value: \.sortCat) { row in
                 Text(row.category ?? "Other")
             }
         }
+    }
+
+    /// Window rank, plus the aggregate rank band when the benchmark has one
+    /// (servers sharing a band cannot be ordered from this data).
+    private func rankCell(rank: Int?, band: Int?) -> some View {
+        HStack(spacing: 4) {
+            Text(rank.map(String.init) ?? "—")
+                .foregroundStyle(.tertiary)
+            if let band {
+                Text("b\(band)")
+                    .font(.caption2.weight(band == 1 ? .semibold : .regular))
+                    .foregroundStyle(band == 1 ? .primary : .secondary)
+                    .help("Aggregate rank band \(band): 95% CIs overlap within a band, so their order is not statistically resolved")
+            }
+        }
+        .monospacedDigit()
     }
 
     private func resolverCell(_ row: RankedServer) -> some View {
@@ -69,18 +96,11 @@ struct RunTable: View {
     }
 
     private func invalidCell(_ row: RankedServer) -> some View {
-        let color: Color = row.badC > 0 ? .orange : .secondary
-        return Text(String(row.badC))
+        let color: Color = row.totalInvalid > 0 ? .orange : .secondary
+        return Text(String(row.totalInvalid))
             .monospacedDigit()
             .foregroundStyle(color)
-    }
-
-    private func rankPosition(_ row: RankedServer) -> String {
-        let sorted = ranked.ranked
-            .sorted { $0.sortU < $1.sortU }
-        guard let idx = sorted.firstIndex(where: { $0.ip == row.ip }) else {
-            return "—"
-        }
-        return "\(idx + 1)"
+            .help("\(row.failU ?? 0) uncached SERVFAIL/REFUSED/other, " +
+                  "\(row.badC) invalid cached answers")
     }
 }

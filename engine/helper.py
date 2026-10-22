@@ -53,10 +53,20 @@ _cancel = threading.Event()
 _shutting_down = threading.Event()
 
 
+def _dumps_strict(obj):
+    """IPC serialization with allow_nan=False: non-finite floats (NaN/Infinity)
+    raise ValueError instead of emitting 'NaN'/'Infinity' tokens that Python
+    accepts but the app-side JSONSerialization rejects (NSException on encode).
+    A ValueError raised inside emit()/reply() surfaces to the caller as an
+    ok:false error response (job worker catches Exception), so bad numerics
+    fail loudly at the source instead of poisoning the client."""
+    return json.dumps(obj, allow_nan=False)
+
+
 def emit(obj):
     obj["v"] = PROTOCOL_VERSION
     with _out_lock:
-        sys.stdout.write(json.dumps(obj) + "\n")
+        sys.stdout.write(_dumps_strict(obj) + "\n")
         sys.stdout.flush()
 
 
@@ -142,7 +152,8 @@ def _measure_one_window(ips, outdir, req):
                 dnslib2.set_qos_user_interactive()
             except OSError:
                 pass
-            results = measure.deep_all_kqueue(ips, fw, netsvc=req.get("netsvc"))
+            results = measure.deep_all_kqueue(ips, fw, netsvc=req.get("netsvc"),
+                                              cancel=_cancel)
         else:
             workers = max(1, min(int(req.get("workers", measure.WORKERS)), 128))
             flock = threading.Lock()
@@ -171,6 +182,15 @@ def _measure_one_window(ips, outdir, req):
         with open(os.path.join(outdir, "deepbench-results.jsonl"), "w") as f:
             for r in results:
                 f.write(json.dumps(r) + "\n")
+        if _cancel.is_set():
+            # partial window: samples kept for inspection, but no ranked.json,
+            # so it can never be mistaken for a complete measurement
+            with open(os.path.join(outdir, "cancelled.json"), "w") as f:
+                json.dump({"cancelled": True, "n_records": len(results),
+                           "n_requested": len(ips),
+                           "elapsed_s": round(time.time() - t0, 1)}, f)
+            emit({"event": "window_cancelled", "dir": outdir})
+            return results
         measure.rank(results, outdir)
         emit({"event": "window_done", "dir": outdir,
               "elapsed_s": round(time.time() - t0, 1)})
@@ -178,6 +198,17 @@ def _measure_one_window(ips, outdir, req):
     finally:
         if fw is not None:
             fw.close()
+
+
+def _new_benchmark_id():
+    """UTC-second ID, unique among existing run dirs and manifests."""
+    import datetime
+    base = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    bid, k = base, 2
+    while any(os.path.exists(os.path.join(adapter.RUNS, n)) for n in
+              (bid, f"{bid}_w1", f"windows-{bid}.json")):
+        bid, k = f"{base}-{k}", k + 1
+    return bid
 
 
 def cmd_measure(req):
@@ -198,14 +229,15 @@ def cmd_measure(req):
     import datetime
     import random
     ranked_last = None
+    # one stable benchmark ID for every window of this request
+    bench_id = _new_benchmark_id()
     for w in range(windows):
         if _cancel.is_set():
-            return {"cancelled": True, "run_dirs": dirs}
+            return {"cancelled": True, "run_dirs": dirs, "benchmark_id": bench_id}
         ips = list(base_ips)
         random.shuffle(ips)  # fresh order per window (independent windows)
-        ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        outdir = (f"{adapter.RUNS}/{ts}" if windows == 1
-                  else f"{adapter.RUNS}/{ts}_w{w + 1}")
+        outdir = (f"{adapter.RUNS}/{bench_id}" if windows == 1
+                  else f"{adapter.RUNS}/{bench_id}_w{w + 1}")
         os.makedirs(outdir, exist_ok=True)
         adapter.preserve_checkpoints(outdir)
         dirs.append(outdir)
@@ -213,27 +245,31 @@ def cmd_measure(req):
               "n_servers": len(ips)})
         results = _measure_one_window(ips, outdir, req)
         if _cancel.is_set():
-            return {"cancelled": True, "run_dirs": dirs}
+            return {"cancelled": True, "run_dirs": dirs, "benchmark_id": bench_id}
         ranked_last = json.load(open(os.path.join(outdir, "ranked.json")))
     manifest = None
     aggregate = None
     if windows > 1:
-        manifest = f"{adapter.RUNS}/windows-{os.path.basename(dirs[0]).rsplit('_w', 1)[0]}.json"
+        manifest = f"{adapter.RUNS}/windows-{bench_id}.json"
         json.dump({"windows": dirs, "engine": req.get("engine", "kqueue"),
                    "netsvc": req.get("netsvc", "off"), "n_requested": n,
                    "generated": datetime.datetime.now(datetime.timezone.utc)
                    .strftime("%Y-%m-%dT%H:%M:%SZ")},
                   open(manifest, "w"), indent=1)
         _phase("aggregate", 1, 1)
-        aggregate = stability.aggregate(manifest)
+        aggregate = stability.aggregate(
+            manifest, out=f"{adapter.RUNS}/windows-{bench_id}.aggregate.json")
     return {"cancelled": False, "run_dirs": dirs, "manifest": manifest,
-            "ranked": ranked_last, "aggregate": aggregate}
+            "benchmark_id": bench_id, "ranked": ranked_last,
+            "aggregate": aggregate}
 
 
 def cmd_aggregate(req):
     manifest = req["manifest"]
     _phase("aggregate", 1, 1)
-    return stability.aggregate(manifest)
+    out = (manifest[:-len(".json")] + ".aggregate.json"
+           if manifest.endswith(".json") else None)
+    return stability.aggregate(manifest, out=out)
 
 
 def cmd_cancel(_req):
@@ -258,6 +294,9 @@ def _job_worker(jobs):
     while True:
         req = jobs.get()
         req_id = req.get("id")
+        if not _shutting_down.is_set():
+            # a cancel targets the job running when it arrived; never a later one
+            _cancel.clear()
         try:
             emit({"event": "job", "cmd": req["cmd"], "state": "started"})
             data = COMMANDS[req["cmd"]](req)

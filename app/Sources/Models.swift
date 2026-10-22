@@ -16,6 +16,7 @@ struct RankedServer: Codable, Identifiable, Hashable, Sendable {
     var badC: Int
     var unreach: Int?
     var strays: Int
+    var failU: Int?
     var ptr: String?
     var category: String?
 
@@ -24,6 +25,7 @@ struct RankedServer: Codable, Identifiable, Hashable, Sendable {
     enum CodingKeys: String, CodingKey {
         case ip, uMed = "u_med", cMed = "c_med", uP90 = "u_p90", uMax = "u_max"
         case kdMed = "kd_med", toU = "to_u", toC = "to_c", badC = "bad_c"
+        case failU = "fail_u"
         case unreach, strays, ptr, category
     }
 
@@ -40,6 +42,7 @@ struct RankedServer: Codable, Identifiable, Hashable, Sendable {
         badC = (try? c.decode(Int.self, forKey: .badC)) ?? 0
         unreach = try? c.decodeIfPresent(Int.self, forKey: .unreach)
         strays = (try? c.decode(Int.self, forKey: .strays)) ?? 0
+        failU = try? c.decodeIfPresent(Int.self, forKey: .failU)
         ptr = try? c.decodeIfPresent(String.self, forKey: .ptr)
         category = try? c.decodeIfPresent(String.self, forKey: .category)
     }
@@ -63,6 +66,8 @@ struct RankedServer: Codable, Identifiable, Hashable, Sendable {
     var sortKd: Double { kdMed ?? -1 }
     var sortCat: String { category ?? "Other" }
     var totalTimeouts: Int { toU + toC }
+    /// Uncached SERVFAIL/REFUSED/other-rcode failures + invalid cached answers.
+    var totalInvalid: Int { badC + (failU ?? 0) }
 
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -77,6 +82,7 @@ struct RankedServer: Codable, Identifiable, Hashable, Sendable {
         try c.encode(badC, forKey: .badC)
         try c.encodeIfPresent(unreach, forKey: .unreach)
         try c.encode(strays, forKey: .strays)
+        try c.encodeIfPresent(failU, forKey: .failU)
         try c.encodeIfPresent(ptr, forKey: .ptr)
         try c.encodeIfPresent(category, forKey: .category)
     }
@@ -104,6 +110,7 @@ struct ServerSamples: Codable, Identifiable, Hashable, Sendable {
     var toC: Int
     var badC: Int
     var strays: Int
+    var failU: Int?
     var unreach: Int?
     var kdeltas: [Double]?
     var engine: String?
@@ -111,7 +118,7 @@ struct ServerSamples: Codable, Identifiable, Hashable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case ip, uncached, cached, strays, unreach, kdeltas, engine, netsvc
-        case toU = "to_u", toC = "to_c", badC = "bad_c"
+        case toU = "to_u", toC = "to_c", badC = "bad_c", failU = "fail_u"
     }
 
     var id: String { ip }
@@ -125,6 +132,7 @@ struct ServerSamples: Codable, Identifiable, Hashable, Sendable {
         toC = (try? c.decode(Int.self, forKey: .toC)) ?? 0
         badC = (try? c.decode(Int.self, forKey: .badC)) ?? 0
         strays = (try? c.decode(Int.self, forKey: .strays)) ?? 0
+        failU = try? c.decodeIfPresent(Int.self, forKey: .failU)
         unreach = try? c.decodeIfPresent(Int.self, forKey: .unreach)
         kdeltas = try? c.decodeIfPresent([Double].self, forKey: .kdeltas)
         engine = try? c.decodeIfPresent(String.self, forKey: .engine)
@@ -141,12 +149,15 @@ struct QueryRecord: Codable, Identifiable, Hashable, Sendable {
     var rcode: Int
     var an: Int
     var kd: Double?
+    /// 0-based index among the decoded records of deepbench-perquery.jsonl:
+    /// stable and unique (field tuples repeat for cached probes).
+    var seq: Int = 0
 
     enum CodingKeys: String, CodingKey {
         case ip, kind, name, ms, rcode, an, kd
     }
 
-    var id: String { "\(ip)#\(kind)#\(name ?? "?")#\(ms ?? -1)#\(rcode)#\(an)" }
+    var id: Int { seq }
 
     /// rcode -2 = timeout, per engine convention.
     var isTimeout: Bool { rcode == -2 }
@@ -162,12 +173,13 @@ struct AggregateRecord: Codable, Sendable {
         var wireMed: Double?
         var betweenRangeMs: Double
         var rankBand: Int
-        var successU: Double
-        var successC: Double
+        var successU: Double?
+        var successC: Double?
         var provider: String
+        var ci95: [Double]?
 
         enum CodingKeys: String, CodingKey {
-            case ip, provider, rankBand = "rank_band"
+            case ip, provider, ci95, rankBand = "rank_band"
             case uMed = "u_med", wireMed = "wire_med"
             case betweenRangeMs = "between_range_ms"
             case successU = "success_u", successC = "success_c"

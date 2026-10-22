@@ -55,7 +55,7 @@ struct RankingsView: View {
                                detail: "Pick a run in History to see its rankings.")
             }
         }
-        .task(id: model.selectedRunID) {
+        .task(id: model.selectedRunKey) {
             guard let id = model.selectedRunID else { detail = nil; return }
             loadFailed = false
             detail = nil
@@ -70,6 +70,8 @@ struct RankingsView: View {
         VStack(spacing: 0) {
             summaryBar(ranked)
             RunTable(rows: rows, ranked: ranked,
+                     bands: Dictionary((detail?.aggregate?.servers ?? [])
+                        .map { ($0.ip, $0.rankBand) }, uniquingKeysWith: { a, _ in a }),
                      selection: Binding(
                         get: { model.selectedIP },
                         set: { model.selectedIP = $0 }),
@@ -112,10 +114,20 @@ struct RankingsView: View {
                 }
             }
             Spacer()
-            if detail?.aggregate != nil {
-                Label("Aggregate available", systemImage: "chart.bar.doc.horizontal")
+            if let agg = detail?.aggregate {
+                Label("Benchmark \(detail?.summary.windowGroupID ?? "?") · " +
+                      "\(agg.windows.count) windows · band 1: \(agg.rankBand1.count) unresolved",
+                      systemImage: "chart.bar.doc.horizontal")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .help(agg.notes?["exploratory"]
+                          ?? "Rank bands merge servers whose 95% CIs overlap: their order is not statistically resolved.")
+                if agg.notes?["exploratory"] != nil {
+                    Text("Exploratory")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.orange)
+                        .help(agg.notes?["exploratory"] ?? "")
+                }
             }
         }
         .font(.callout)

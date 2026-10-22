@@ -221,7 +221,7 @@ def test_malformed_line(python, data_dir):
         r2, _ = rsp(7, h, timeout=15)
         check("helper alive after malformed input",
               r2 is not None and r2.get("ok") is True
-              and r2.get("data", {}).get("passed") == 9)
+              and r2.get("data", {}).get("passed") == r2["data"].get("total") == 10)
         rc = h.stop(grace=15)
         check("exit 0 after malformed input", rc == 0, f"rc={rc}")
     finally:

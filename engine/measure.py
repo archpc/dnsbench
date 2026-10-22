@@ -46,8 +46,8 @@ def deep(ip, fw, flock):
         s.setsockopt(socket.SOL_SOCKET, SO_TIMESTAMP, 1)  # kernel rx timestamps
     except OSError as e:
         return {"ip": ip, "error": repr(e)}
-    r = {"ip": ip, "uncached": [], "cached": [], "to_u": 0, "to_c": 0, "bad_c": 0,
-         "strays": 0, "kdeltas": []}
+    r = {"ip": ip, "uncached": [], "cached": [], "to_u": 0, "to_c": 0, "fail_u": 0,
+         "bad_c": 0, "strays": 0, "kdeltas": []}
 
     def rec(kind, name, ms, rc, an, st, kd=None):
         r["strays"] += st
@@ -75,10 +75,12 @@ def deep(ip, fw, flock):
         ms, rc, an, kd = probe("uncached", name)
         if rc == -2:
             r["to_u"] += 1
-        else:
+        elif rc in (0, 3):  # NOERROR / NXDOMAIN: a real resolution
             r["uncached"].append(round(ms, 1))
             if kd is not None:
                 r["kdeltas"].append(kd)
+        else:  # SERVFAIL, REFUSED, other: failure, never a latency sample
+            r["fail_u"] += 1
     for d in POPULAR:
         probe("prime", d)
     for i in range(N_CACHED):
@@ -108,12 +110,13 @@ def build_tasks(ip):
     return (ip, tasks)
 
 
-def deep_all_kqueue(ips, fw, netsvc=None):
+def deep_all_kqueue(ips, fw, netsvc=None, cancel=None):
     """Kqueue engine: all servers in one event loop, probes interleaved across
     servers (<=1 outstanding per server). Same task order and semantics as
     deep(); records additionally carry "unreach" and per-query "kd"."""
     specs = [build_tasks(ip) for ip in ips]
-    return dnslib2.run_interleaved(specs, fw, timeout=TIMEOUT, netsvc=netsvc)
+    return dnslib2.run_interleaved(specs, fw, timeout=TIMEOUT, netsvc=netsvc,
+                                   cancel=cancel)
 
 
 def provider_label(ip):
@@ -125,6 +128,7 @@ def provider_label(ip):
 
 def categorize(ip, ptr):
     n = ptr.lower()
+    labels = set(n.split("."))
     if "akamai" in n:
         return "Akamai"
     if n == "?":
@@ -133,9 +137,9 @@ def categorize(ip, ptr):
         if ip.startswith("76.76."):
             return "ControlD"
         return "other-noPTR"
-    if "ntt" in n:
+    if "ntt" in labels:
         return "NTT"
-    if "gblx" in n:
+    if "gblx" in labels:
         return "Level3/Savvis"
     if "windstream" in n or "paetec" in n or "dejazzd" in n:
         return "Windstream-family"
@@ -168,6 +172,7 @@ def rank(results, outdir):
                      "u_max": max(u),
                      "kd_med": round(statistics.median(kd), 3) if kd else None,
                      "to_u": r["to_u"], "to_c": r["to_c"], "bad_c": r["bad_c"],
+                     "fail_u": r.get("fail_u", 0),
                      "unreach": r.get("unreach", 0),
                      "strays": r["strays"]})
     good.sort(key=lambda x: (x["u_med"], x["c_med"]))
@@ -201,6 +206,7 @@ def rank(results, outdir):
             f"{(' -> ' + ', '.join(incomplete[:8])) if incomplete else ''}\n"
             f"# strays={sum(r['strays'] for r in results)} "
             f"to_u={sum(r['to_u'] for r in results)} to_c={sum(r['to_c'] for r in results)} "
+            f"fail_u={sum(r.get('fail_u', 0) for r in results)} "
             f"unreach={unreach}\n"
             f"# composition (recounted from stored PTR): {dict(cats)}\n")
     if kds:

@@ -60,17 +60,23 @@ final class HelperController {
     private(set) var diagnostics: [String] = []
 
     private var process: Process?
-    private var stdoutBuffer = ""
     private var pending: [Int: CheckedContinuation<Data?, Never>] = [:]
     private var nextID = 1
-    private var stderrTail: [String] = []
     private var expectedExit: Bool = false
-    private let queue = DispatchQueue(label: "helper.ipc")
 
     // Resolved paths (set at init; documented for the final report).
     let pythonPath: String
     let helperScript: String
     let dataDir: URL
+
+    /// Explicit interpreter/script (tests and tooling).
+    init(dataDir: URL, pythonPath: String, helperScript: String) {
+        self.dataDir = dataDir
+        self.pythonPath = pythonPath
+        self.helperScript = helperScript
+    }
+
+    var processIdentifier: Int32? { process?.processIdentifier }
 
     init(dataDir: URL) {
         self.dataDir = dataDir
@@ -107,7 +113,8 @@ final class HelperController {
         progress = LiveProgress()
         let p = Process()
         p.executableURL = URL(fileURLWithPath: pythonPath)
-        p.arguments = [helperScript]
+        // Keep imports from writing bytecode into the signed application bundle.
+        p.arguments = ["-B", helperScript]
         var env = ProcessInfo.processInfo.environment
         env["DNSBENCH_DATA_DIR"] = dataDir.path
         env["PYTHONUNBUFFERED"] = "1"
@@ -118,10 +125,17 @@ final class HelperController {
         p.standardOutput = outPipe
         p.standardError = errPipe
         p.standardInput = inPipe
+        // Termination and stdout delivery hop to the main queue, which is
+        // FIFO and MainActor-isolated; every handler is tagged with the
+        // process it belongs to so a stale callback from a previous helper
+        // can never touch the current one.
+        let pid = ObjectIdentifier(p)
         p.terminationHandler = { [weak self] proc in
             let status = proc.terminationStatus
-            Task { @MainActor [weak self] in
-                self?.handleTermination(status: status)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self?.handleTermination(of: pid, status: status)
+                }
             }
         }
         do {
@@ -132,25 +146,43 @@ final class HelperController {
             return
         }
         process = p
+        let framer = LineFramer()
         outPipe.fileHandleForReading.readabilityHandler = { [weak self] fh in
             let data = fh.availableData
-            guard !data.isEmpty else { return }
-            self?.queue.async { self?.consume(data) }
+            guard !data.isEmpty else {
+                fh.readabilityHandler = nil  // EOF: stop the handler spinning
+                return
+            }
+            let lines = framer.append(data)  // serial: FileHandle delivers in order
+            guard !lines.isEmpty else { return }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self, self.process.map(ObjectIdentifier.init) == pid
+                    else { return }
+                    for line in lines { self.handleLine(line) }
+                }
+            }
         }
         errPipe.fileHandleForReading.readabilityHandler = { [weak self] fh in
             let data = fh.availableData
-            guard !data.isEmpty, let s = String(data: data, encoding: .utf8) else {
+            guard !data.isEmpty else {
+                fh.readabilityHandler = nil
                 return
             }
-            let text = s
-            Task { @MainActor [weak self] in
-                self?.log(text.trimmingCharacters(in: .newlines))
+            let text = String(decoding: data, as: UTF8.self)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self?.log(text.trimmingCharacters(in: .newlines))
+                }
             }
         }
         state = .ready
     }
 
-    private func handleTermination(status: Int32) {
+    private func handleTermination(of pid: ObjectIdentifier, status: Int32) {
+        // a late callback from an already-replaced process must not clobber
+        // the current one (restart race)
+        guard let p = process, ObjectIdentifier(p) == pid else { return }
         process = nil
         // fail all pending requests so continuations never leak
         let waiting = pending
@@ -162,6 +194,12 @@ final class HelperController {
             log("helper terminated unexpectedly (status \(status)); partial run data preserved")
         }
         state = .exited(status)
+    }
+
+    /// Return to .ready after a job only if the helper is still alive; a crash
+    /// mid-job must keep showing .exited(status).
+    private func finishJob() {
+        if state == .busy, process != nil { state = .ready }
     }
 
     /// Orderly shutdown: request + wait bounded, then SIGTERM fallback.
@@ -202,12 +240,21 @@ final class HelperController {
         let line = try JSONSerialization.data(withJSONObject: req) + Data([0x0A])
         let data: Data? = await withCheckedContinuation { cont in
             pending[id] = cont
-            inPipe()?.write(line)
-            self.queue.asyncAfter(deadline: .now() + timeout) { [weak self] in
-                guard let self, let c = self.pending.removeValue(forKey: id) else {
-                    return
+            do {
+                try inPipe()?.write(contentsOf: line)
+            } catch {
+                // helper gone (EPIPE): fail now instead of raising an ObjC exception
+                pending.removeValue(forKey: id)?.resume(returning: nil)
+                return
+            }
+            guard timeout.isFinite else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, let c = self.pending.removeValue(forKey: id) else {
+                        return
+                    }
+                    c.resume(returning: nil)  // timeout sentinel
                 }
-                c.resume(returning: nil)  // timeout sentinel
             }
         }
         guard let data else {
@@ -248,8 +295,10 @@ final class HelperController {
         var poolEligible: Int?
 
         enum CodingKeys: String, CodingKey {
-            case helper, python, dataDir, poolEligible
+            case helper, python
             case protocolVersion = "protocol"
+            case dataDir = "data_dir"
+            case poolEligible = "pool_eligible"
         }
     }
 
@@ -270,6 +319,7 @@ final class HelperController {
         var cancelled: Bool
         var runDirs: [String]
         var manifest: String?
+        var benchmarkID: String?
         var rankedJSON: Data?
         var aggregateJSON: Data?
     }
@@ -282,16 +332,18 @@ final class HelperController {
         progress = LiveProgress(command: "measure", state: "started",
                                 startedAt: Date())
         state = .busy
-        defer { state = .ready }
+        defer { finishJob() }
         let d = try await request("measure", args: args, timeout: .infinity)
         let o = try JSONDecoder().decode(MeasureRaw.self, from: d)
         return MeasureOutcome(cancelled: o.cancelled, runDirs: o.runDirs,
-                              manifest: o.manifest,
+                              manifest: o.manifest, benchmarkID: o.benchmarkID,
                               rankedJSON: o.ranked.flatMap {
-                                  try? JSONSerialization.data(withJSONObject: $0)
+                                  try? JSONSerialization.data(
+                                      withJSONObject: $0.foundationObject)
                               },
                               aggregateJSON: o.aggregate.flatMap {
-                                  try? JSONSerialization.data(withJSONObject: $0)
+                                  try? JSONSerialization.data(
+                                      withJSONObject: $0.foundationObject)
                               })
     }
 
@@ -299,13 +351,20 @@ final class HelperController {
         var cancelled: Bool
         var runDirs: [String]
         var manifest: String?
+        var benchmarkID: String?
         var ranked: JSONValue?
         var aggregate: JSONValue?
+
+        enum CodingKeys: String, CodingKey {
+            case cancelled, manifest, ranked, aggregate
+            case runDirs = "run_dirs"
+            case benchmarkID = "benchmark_id"
+        }
     }
 
     func discovery(mode: String) async throws -> Data {
         state = .busy
-        defer { state = .ready }
+        defer { finishJob() }
         progress = LiveProgress(command: "discovery", state: "started",
                                 startedAt: Date())
         return try await request("discovery", args: ["mode": mode],
@@ -324,16 +383,6 @@ final class HelperController {
 
     // MARK: line parsing
 
-    private func consume(_ data: Data) {
-        stdoutBuffer += String(decoding: data, as: UTF8.self)
-        while let nl = stdoutBuffer.firstIndex(of: "\n") {
-            let line = String(stdoutBuffer[..<nl])
-            stdoutBuffer.removeSubrange(..<stdoutBuffer.index(after: nl))
-            guard !line.isEmpty else { continue }
-            Task { @MainActor [weak self] in self?.handleLine(line) }
-        }
-    }
-
     private func handleLine(_ line: String) {
         guard let obj = try? JSONSerialization.jsonObject(with: Data(line.utf8))
                 as? [String: Any] else {
@@ -343,10 +392,9 @@ final class HelperController {
         if let id = obj["id"] as? Int, obj["ok"] != nil {
             // response
             if let cont = pending.removeValue(forKey: id) {
-                if let data = try? JSONSerialization.data(
-                    withJSONObject: obj, options: [.sortedKeys]) {
-                    cont.resume(returning: data)
-                }
+                // always resume: a dropped continuation would hang the caller
+                cont.resume(returning: try? JSONSerialization.data(
+                    withJSONObject: obj, options: [.sortedKeys]))
             }
             return
         }
@@ -368,6 +416,8 @@ final class HelperController {
             progress.phase = "deep"
         case "window_done":
             progress.phase = "rank"
+        case "window_cancelled":
+            progress.phase = "cancelled"
         case "query":
             progress.queryCount += 1
         default:
@@ -381,6 +431,25 @@ final class HelperController {
     }
 }
 
+// MARK: - Line framing (confined to the stdout FileHandle's serial callbacks)
+
+/// Splits the helper's stdout byte stream into complete lines. Bytes (not
+/// Strings) are buffered so a UTF-8 sequence split across reads stays intact.
+final class LineFramer: @unchecked Sendable {
+    private var buffer = Data()
+
+    func append(_ data: Data) -> [String] {
+        buffer.append(data)
+        var lines: [String] = []
+        while let nl = buffer.firstIndex(of: 0x0A) {
+            let line = buffer[buffer.startIndex..<nl]
+            buffer.removeSubrange(buffer.startIndex...nl)
+            if !line.isEmpty { lines.append(String(decoding: line, as: UTF8.self)) }
+        }
+        return lines
+    }
+}
+
 // MARK: - JSONValue (loose decode for pass-through payloads)
 
 enum JSONValue: Decodable, Sendable {
@@ -390,6 +459,21 @@ enum JSONValue: Decodable, Sendable {
     case string(String)
     case array([JSONValue])
     case object([String: JSONValue])
+
+    /// JSONSerialization only accepts plist types (NSString/NSNumber/NSNull/
+    /// NSArray/NSDictionary). Passing a JSONValue enum directly raises an
+    /// uncatchable NSInvalidArgumentException ("Invalid type in JSON write"),
+    /// which escapes Swift async frames and corrupts the process.
+    var foundationObject: Any {
+        switch self {
+        case .null: return NSNull()
+        case .bool(let b): return b
+        case .number(let d): return d
+        case .string(let s): return s
+        case .array(let a): return a.map { $0.foundationObject }
+        case .object(let o): return o.mapValues { $0.foundationObject }
+        }
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
