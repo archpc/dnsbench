@@ -1,0 +1,41 @@
+{
+  "generated": "20000101T000000Z",
+  "n_deepbenched": 2,
+  "n_ranked": 2,
+  "incomplete_cached": [],
+  "synthetic": true,
+  "ranked": [
+    {
+      "ip": "192.0.2.1",
+      "u_med": 10.0,
+      "c_med": 3.0,
+      "u_p90": 11.0,
+      "u_max": 11.0,
+      "kd_med": null,
+      "to_u": 0,
+      "to_c": 0,
+      "bad_c": 0,
+      "fail_u": 0,
+      "unreach": 0,
+      "strays": 0,
+      "ptr": "synthetic-1.example",
+      "category": "Other"
+    },
+    {
+      "ip": "192.0.2.2",
+      "u_med": 20.0,
+      "c_med": 3.0,
+      "u_p90": 21.0,
+      "u_max": 21.0,
+      "kd_med": null,
+      "to_u": 0,
+      "to_c": 0,
+      "bad_c": 0,
+      "fail_u": 0,
+      "unreach": 0,
+      "strays": 0,
+      "ptr": "synthetic-2.example",
+      "category": "Other"
+    }
+  ]
+}

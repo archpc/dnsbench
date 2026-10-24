@@ -1,0 +1,2 @@
+{"ip": "192.0.2.1", "uncached": [9, 10, 11], "cached": [2, 3, 4], "hijack": 0, "to_u": 0, "to_c": 0, "servfail_u": 0, "refused_u": 0, "other_u": 0, "strays": 0, "synthetic": true}
+{"ip": "192.0.2.2", "uncached": [19, 20, 21], "cached": [2, 3, 4], "hijack": 0, "to_u": 0, "to_c": 0, "servfail_u": 0, "refused_u": 0, "other_u": 0, "strays": 0, "synthetic": true}

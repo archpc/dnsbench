@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "generated": "2000-01-01T00:00:00Z",
+    "eligible": 2,
+    "hijacked_excluded": 0,
+    "synthetic": true
+  },
+  "pool": [
+    {
+      "ip": "192.0.2.1",
+      "u_med": 10,
+      "c_med": 3,
+      "score": 10.9,
+      "rel_u": 100,
+      "rel_c": 100,
+      "sf": 0,
+      "rf": 0,
+      "to_u": 0,
+      "to_c": 0,
+      "strays": 0
+    },
+    {
+      "ip": "192.0.2.2",
+      "u_med": 20,
+      "c_med": 3,
+      "score": 20.9,
+      "rel_u": 100,
+      "rel_c": 100,
+      "sf": 0,
+      "rf": 0,
+      "to_u": 0,
+      "to_c": 0,
+      "strays": 0
+    }
+  ]
+}

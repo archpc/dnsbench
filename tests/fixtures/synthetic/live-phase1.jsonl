@@ -1,0 +1,3 @@
+{"ip": "192.0.2.1", "alive": true, "ms": 5, "synthetic": true}
+{"ip": "192.0.2.2", "alive": true, "ms": 6, "synthetic": true}
+{"ip": "198.51.100.1", "alive": false, "ms": null, "synthetic": true}

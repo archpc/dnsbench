@@ -26,13 +26,7 @@ import time
 # installed). Defaults to <repo>/datasets for the dev checkout.
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VENDORED = os.path.dirname(os.path.abspath(__file__))
-SKILL_SCRIPTS = os.path.expanduser(
-    "~/.hermes/skills/macos-diagnostics/dns-benchmark/scripts")
-# Vendored skill-script copies are the authoritative source (self-containment
-# for the native app); the skill dir is a fallback for the dev checkout.
-# Inserted last so it sits FIRST on sys.path.
-if os.path.isdir(SKILL_SCRIPTS) and SKILL_SCRIPTS not in sys.path:
-    sys.path.insert(0, SKILL_SCRIPTS)
+# Always load the checked-in engine, never a personal Hermes installation.
 if os.path.isdir(VENDORED):
     sys.path.insert(0, VENDORED)
 
@@ -43,7 +37,6 @@ import measure   # noqa: E402
 DATA_DIR = os.environ.get("DNSBENCH_DATA_DIR") or os.path.join(APP_DIR, "datasets")
 RUNS = os.path.join(DATA_DIR, "runs")
 DATASETS = DATA_DIR
-SCRATCH = os.path.expanduser("~/.hermes/cache/scratch")
 
 
 class Tee(io.TextIOBase):
@@ -74,25 +67,11 @@ class Tee(io.TextIOBase):
 
 
 def ensure_datasets():
-    """Copy skill scratch artifacts into datasets/ once. Originals preserved."""
+    """Create output directories without importing any external datasets."""
     os.makedirs(DATASETS, exist_ok=True)
     os.makedirs(RUNS, exist_ok=True)
-    copied = []
-    for name in ("master-ipv4.txt", "live-phase1.jsonl", "phase2b-results.jsonl",
-                 "phase2b-perquery.jsonl", "pool.json", "phase3c-results.jsonl"):
-        src = os.path.join(SCRATCH, name)
-        dst = os.path.join(DATASETS, name)
-        if os.path.exists(src) and not os.path.exists(dst):
-            shutil.copy2(src, dst)
-            copied.append(name)
-    if os.path.isdir(os.path.join(SCRATCH, "runs")):
-        for ts in os.listdir(os.path.join(SCRATCH, "runs")):
-            s = os.path.join(SCRATCH, "runs", ts)
-            d = os.path.join(RUNS, ts)
-            if os.path.isdir(s) and not os.path.exists(d):
-                shutil.copytree(s, d)
-                copied.append(f"runs/{ts}")
-    return copied
+    return []
+
 
 
 def new_run_dir():

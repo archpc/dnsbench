@@ -1,0 +1,14 @@
+{"ip": "192.0.2.1", "kind": "prime", "ms": 1.0, "rcode": 0, "an": 1, "synthetic": true}
+{"ip": "192.0.2.1", "kind": "uncached", "ms": 9.0, "rcode": 3, "an": 0, "synthetic": true}
+{"ip": "192.0.2.1", "kind": "uncached", "ms": 10.0, "rcode": 3, "an": 0, "synthetic": true}
+{"ip": "192.0.2.1", "kind": "uncached", "ms": 11.0, "rcode": 3, "an": 0, "synthetic": true}
+{"ip": "192.0.2.1", "kind": "cached", "ms": 2.0, "rcode": 0, "an": 1, "synthetic": true}
+{"ip": "192.0.2.1", "kind": "cached", "ms": 3.0, "rcode": 0, "an": 1, "synthetic": true}
+{"ip": "192.0.2.1", "kind": "cached", "ms": 4.0, "rcode": 0, "an": 1, "synthetic": true}
+{"ip": "192.0.2.2", "kind": "prime", "ms": 1.0, "rcode": 0, "an": 1, "synthetic": true}
+{"ip": "192.0.2.2", "kind": "uncached", "ms": 19.0, "rcode": 3, "an": 0, "synthetic": true}
+{"ip": "192.0.2.2", "kind": "uncached", "ms": 20.0, "rcode": 3, "an": 0, "synthetic": true}
+{"ip": "192.0.2.2", "kind": "uncached", "ms": 21.0, "rcode": 3, "an": 0, "synthetic": true}
+{"ip": "192.0.2.2", "kind": "cached", "ms": 2.0, "rcode": 0, "an": 1, "synthetic": true}
+{"ip": "192.0.2.2", "kind": "cached", "ms": 3.0, "rcode": 0, "an": 1, "synthetic": true}
+{"ip": "192.0.2.2", "kind": "cached", "ms": 4.0, "rcode": 0, "an": 1, "synthetic": true}

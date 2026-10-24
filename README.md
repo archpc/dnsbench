@@ -1,82 +1,121 @@
-# DNSBench web app (v0.1.0, frozen)
+# DNSBench
 
-Local web interface for the GRC-style DNS benchmark experiment: 62,608 public
-resolver candidates, server-rendered SVG charts, live SSE streaming during
-runs, historical run comparison. Plain stdlib Python server + hand-rolled JS.
-No frameworks, no dependencies, no wasm.
+Local DNS resolver benchmark with a stdlib Python web interface and a native
+macOS app. The checked-in `engine/` is authoritative. No Hermes installation,
+pip packages, personal datasets, or Homebrew-specific Python path is needed
+for the web interface and offline smoke test.
+
+## Fresh-clone offline test
+
+From the repository root, with Python 3.9 or newer:
+
+    python3 tests/test_offline.py
+
+This starts a child interpreter with an isolated HOME and no user site packages
+or PYTHONPATH. It tests the vendored DNS wire parser, rejects personal scratch
+imports, loads the synthetic fixture, and starts a real HTTP server on an
+ephemeral loopback port. It checks static assets, dataset coverage, rankings,
+comparison, resolver history, and raw samples. A Python audit hook rejects
+non-loopback socket connections, sends, binds, and DNS lookups. A negative test
+proves the guard blocks both TCP and UDP traffic. No live benchmark runs.
+
+This is a smoke test, not the live measurement or native-app suite. The fixture
+contains invented values, not evidence about resolver performance.
+
+## Browse the synthetic demo
+
+POSIX shell commands, from the repository root:
+
+    DEMO_DIR="$(mktemp -d)"
+    cp -R tests/fixtures/synthetic/. "$DEMO_DIR/"
+    DNSBENCH_DATA_DIR="$DEMO_DIR" python3 server.py
+
+Open http://127.0.0.1:8461/ and browse the two historical runs. Stop with Ctrl-C.
+Set `DNSBENCH_PORT` to use another port. The source fixture stays unchanged.
+
+Important: this is a browsing example, NOT a network-disabled server mode.
+Do not press Run or request discovery/measurement against the synthetic pool.
+Its RFC 5737 documentation addresses are not resolvers, and measurement also
+adds real public reference resolvers. Only the offline test command enforces
+network isolation. Synthetic metadata and `synthetic-*.example` labels identify
+invented data; the UI is otherwise the normal interface.
+
+## Generate real data (network access, explicitly opt in)
+
+Real resolver datasets are intentionally not committed. Startup creates output
+directories only; it never imports files from a personal Hermes installation.
+You can explicitly copy your own compatible datasets into `datasets/`, or run
+the included discovery pipeline. Full discovery can probe tens of thousands of
+addresses and take many minutes. Check your network policy before starting.
+
+From the repository root, in a POSIX shell:
+
+    mkdir -p datasets
+    (cd datasets && ulimit -n 10240 && python3 ../engine/discover.py)
+
+Discovery fetches public candidate lists when `master-ipv4.txt` is missing,
+then writes liveness and screening checkpoints plus `pool.json`. Existing
+checkpoints resume old work; a rerun is not necessarily a fresh measurement.
+Do not mix synthetic and real data. Preserve old checkpoints separately if
+starting a new discovery experiment.
+
+After discovery, launch the web interface:
+
+    python3 server.py
+
+Or measure directly (this sends real UDP/53 traffic and performs PTR lookups):
+
+    (cd datasets && ulimit -n 10240 && python3 ../engine/measure.py --engine thread --n 25 --pool pool.json)
+
+The thread engine avoids the macOS-only kqueue requirement. On macOS,
+`--engine kqueue` selects the interleaved engine. Run history is written under
+`datasets/runs/`. `DNSBENCH_DATA_DIR` configures the web server/native helper;
+the standalone engine scripts use their working directory and CLI arguments.
+
+Offline comparison of existing real run directories:
+
+    python3 engine/stability.py datasets/runs/<first-run> datasets/runs/<second-run>
 
 ## Components
 
-    server.py               stdlib HTTP + SSE (Server-Sent Events), 127.0.0.1 only
-    engine/adapter.py       adapter — the ONLY module that touches the benchmark
-                            engine; imports the validated dns-benchmark skill
-                            scripts (dnslib/discover/measure/stability) as-is,
-                            never mutates them
-    static/                 index.html / app.js / styles.css — no frameworks;
-                            rankings bar chart, resolver detail, explore
-                            scatter, across-runs history, coverage summary
-    tests/verify_dnsbench.py  automated end-to-end verification suite;
-                            launches real jobs — run only when a benchmark is wanted
-    datasets/               benchmark datasets + run history — NOT in this repo
-                            (kept separate from application source; .gitignored)
+    server.py                       loopback HTTP + SSE server
+    engine/                         vendored wire, discovery, measurement, analysis
+    static/                         framework-free browser interface
+    app/                            native macOS app, separate Xcode build
+    skills/dns-benchmark/SKILL.md    portable Hermes workflow using this checkout
+    tests/fixtures/synthetic/       small hand-authored offline demonstration
+    datasets/                       local real datasets and history, gitignored
 
-## Install & run
+The skill is optional operator guidance, not a runtime dependency. When using
+it in Hermes, retain a checkout and run commands from its root; no scripts are
+loaded from the installed skill directory. Native app builds require macOS and
+Xcode; the offline command above neither builds nor validates the native app.
 
-Requirements:
+## Other verification
 
-- Python 3.x (tested with Homebrew python3.15; stdlib only, no pip installs)
-- The benchmark engine: this app imports the validated skill scripts from
-  `~/.hermes/skills/macos-diagnostics/dns-benchmark/scripts/` (dnslib.py,
-  discover.py, measure.py, stability.py). If installed elsewhere, adjust
-  `SKILL_SCRIPTS` at the top of `engine/adapter.py`.
-- Bench datasets under `datasets/` (master-ipv4.txt, phase2b-results.jsonl,
-  pool.json, ...). They are intentionally not committed — generate them with
-  the discovery pipeline of the dns-benchmark skill, or copy from an existing
-  scratch dir. The server refuses to run a job without `datasets/pool.json`.
+    python3 tests/test_aggregate.py      # offline statistical regression tests
+    python3 tests/test_review_fixes.py   # macOS: local UDP + stubbed engine
+    python3 engine/test_engine.py       # macOS: kqueue/local UDP regression gate
 
-Run:
+The following suites are NOT offline smoke tests:
 
-    /opt/homebrew/bin/python3.15 server.py
-    # binds 127.0.0.1:8461 only; open http://127.0.0.1:8461/
+    python3 tests/verify_dnsbench.py
+    python3 tests/test_helper.py --data-dir <real-data-directory>
 
-To stop a server you started yourself, terminate the exact process you launched
-(e.g. Ctrl-C in its foreground shell, or kill the recorded PID). Never kill by
-port enumeration: `lsof -ti -iTCP:<port>` on this host drops the port filter
-and returns unrelated PIDs (see tests/verify_dnsbench.py header comment and the
-dns-benchmark skill, Pitfall #15).
+They exercise real benchmark jobs and require real datasets. The native suite
+is `cd app && xcodebuild -scheme DNSBench test`; snapshots require real runs.
 
-## Verification
+## Measurement boundaries
 
-    /opt/homebrew/bin/python3.15 tests/verify_dnsbench.py
-    # checks: dnslib 10-case parser selftest, engine adapter, dataset invariants,
-    # live server boot, every HTTP endpoint, static assets, SSE stream, run
-    # lifecycle (accept / confirm-gate / decline / cancel / run_complete),
-    # run-dir isolation, checkpoint preservation, compare endpoint.
-    # Exits non-zero on any failure. Spawns and tracks its own server on an
-    # ephemeral port; terminates only that tracked subprocess.
+NXDOMAIN is a valid uncached response; SERVFAIL/REFUSED are failures, not fast
+latency samples. Cached queries are primed first. Rank and reliability claims
+must be supported by raw per-query records. Random-subdomain timings measure
+negative/wildcard paths, not every kind of positive recursion. Small rank gaps
+and overlapping confidence intervals do not establish equivalence or a winner.
 
-Engine and native-app helper suites:
+Each measurement writes an isolated timestamped run directory. Checkpoints are
+copied aside, not deleted. Cancellation targets only the active job. Stop only
+processes you launched and track; never terminate processes by port enumeration.
 
-    python3 tests/test_review_fixes.py   # offline: local UDP responder + stubbed engine
-    python3 engine/test_engine.py        # offline: kqueue engine regression gate
-    python3 tests/test_aggregate.py      # offline: multi-window aggregate math
-    # Helper lifecycle suite: its cancel/crash cases run a real n=2 measure, so it
-    # needs a data dir holding a pool.json (default: <repo>/datasets). Example:
-    mkdir -p /tmp/dnsbench-suite && cp <a pool.json> /tmp/dnsbench-suite/
-    python3 tests/test_helper.py --data-dir /tmp/dnsbench-suite
-    # App: (cd app && xcodebuild -scheme DNSBench test); snapshot tests skip
-    # unless <repo>/datasets holds real runs.
-
-The Rust WASM renderer (viz/) was removed 2026-10-16 as unreachable after the
-chart redesign; recover it from tag v0.1.0 if ever needed.
-
-## Boundaries frozen at v0.1.0
-
-- Engine scripts are imported as-is; correctness rules (validated-response
-  checks, NXDOMAIN-valid scoring, prime logging, bad_c counting, reference
-  interleaving, 10-case selftest before every job) belong to the skill.
-- Every run writes an isolated `datasets/runs/<UTC-timestamp>/` directory;
-  checkpoints are copied aside, never deleted.
-- Cancel terminates only the running benchmark job (cooperative, via a
-  threading.Event); nothing enumerates processes by port to kill them.
-- `datasets/` is data, not source: never committed, never deleted by the app.
+The original web release is tagged `v0.1.0`; its removed Rust WASM renderer can
+be recovered from that tag. Current charts do not need Rust or WASM.
