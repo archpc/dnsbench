@@ -1,6 +1,9 @@
 # Benchmark datasets and run history live OUTSIDE the repo, by design.
 datasets/
 
+# Session work folders archived from ~/Code/ (chat dumps, audits, icon exports)
+history/
+
 # UI verification screenshots (not part of the app)
 .hermes-ui-verify/
 
@@ -10,3 +13,8 @@ __pycache__/
 app/Resources/python/
 app/build/
 .DS_Store
+
+# Third-party reference material (local only, not redistributable)
+icon/research/refs/
+icon/research/hig*.json
+icon/research/icon-composer-doc.md

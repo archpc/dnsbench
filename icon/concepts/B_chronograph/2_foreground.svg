@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Chronograph concept: foreground — precision stopwatch, ink navy on paper.
+       Dial outline, four major ticks, needle at ~1:30, crown + pusher on top. -->
+  <g>
+    <!-- crown stem -->
+    <rect x="486" y="130" width="52" height="120" rx="26" fill="#1F2A44"/>
+    <!-- crown cap / pusher -->
+    <rect x="432" y="76" width="160" height="56" rx="28" fill="#1F2A44"/>
+    <!-- dial -->
+    <circle cx="512" cy="576" r="312" fill="none" stroke="#1F2A44" stroke-width="58"/>
+    <!-- major ticks at 12/3/6/9 -->
+    <rect x="494" y="300" width="36" height="74" rx="18" fill="#1F2A44"/>
+    <rect x="494" y="778" width="36" height="74" rx="18" fill="#1F2A44"/>
+    <rect x="286" y="558" width="74" height="36" rx="18" fill="#1F2A44"/>
+    <rect x="764" y="558" width="74" height="36" rx="18" fill="#1F2A44"/>
+    <!-- needle: coral, pointing to ~1:30 -->
+    <path d="M 512 576 L 700 388" stroke="#E8563F" stroke-width="42" stroke-linecap="round"/>
+    <!-- hub -->
+    <circle cx="512" cy="576" r="46" fill="#1F2A44"/>
+  </g>
+</svg>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- DNSBench production signal layer: amber query core + emerald detection blip
+       sitting on the outer ripple at the upper-right (theta -47.5 deg).
+       A dot, not a sweep: reads as a radar detection marker, never a spinner. -->
+  <g>
+    <circle cx="777" cy="223" r="64" fill="#34D399"/>
+    <circle cx="512" cy="512" r="88" fill="#FFB340"/>
+  </g>
+</svg>

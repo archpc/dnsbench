@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Echo concept: foreground — a query pulse radiating rings (latency echo).
+       Solid dot = the query; rings = the echo propagating; the bold accent arc
+       segment = the measured return. Optical center slightly below canvas center. -->
+  <g fill="none" stroke-linecap="round">
+    <!-- outer ring, faint -->
+    <circle cx="512" cy="540" r="440" stroke="#9FC2FF" stroke-width="30" opacity="0.35"/>
+    <!-- middle ring -->
+    <circle cx="512" cy="540" r="300" stroke="#CFE0FF" stroke-width="46" opacity="0.75"/>
+    <!-- measured return arc, accent, on the middle ring, ~190 degrees from lower-left to upper-right -->
+    <path d="M 409 822 A 300 300 0 1 1 684 294" stroke="#34D399" stroke-width="58"/>
+    <!-- inner faint ring -->
+    <circle cx="512" cy="540" r="160" stroke="#EAF1FF" stroke-width="30" opacity="0.45"/>
+    <!-- query dot -->
+    <circle cx="512" cy="540" r="78" fill="#FFB340"/>
+  </g>
+</svg>

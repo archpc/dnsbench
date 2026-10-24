@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- DNSBench production ripple field: two bold concentric rings centered exactly
+       on (512,512). Outer edge at r=410, well inside the macOS rounded-rect mask. -->
+  <g fill="none">
+    <circle cx="512" cy="512" r="392" stroke="#A9C3F0" stroke-width="36" opacity="0.50"/>
+    <circle cx="512" cy="512" r="252" stroke="#DCE7FB" stroke-width="52" opacity="0.92"/>
+  </g>
+</svg>

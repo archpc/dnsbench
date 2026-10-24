@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Comparator concept: foreground — three benchmark bars on a baseline.
+       Leader bar accent green, runners-up muted. Rounded caps, optical centering. -->
+  <g>
+    <rect x="270" y="520" width="128" height="240" rx="64" fill="#7FB8A4"/>
+    <rect x="448" y="400" width="128" height="360" rx="64" fill="#2EA88A"/>
+    <rect x="626" y="270" width="128" height="490" rx="64" fill="#123B33"/>
+    <rect x="240" y="772" width="544" height="40" rx="20" fill="#123B33" opacity="0.25"/>
+  </g>
+</svg>
