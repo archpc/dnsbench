@@ -83,20 +83,8 @@ final class HelperController {
         let res = Bundle.main.resourceURL!
         let bundledPython = res.appendingPathComponent("python/bin/python3.13")
         let bundledHelper = res.appendingPathComponent("engine/helper.py")
-        if FileManager.default.fileExists(atPath: bundledPython.path),
-           FileManager.default.fileExists(atPath: bundledHelper.path) {
-            pythonPath = bundledPython.path
-            helperScript = bundledHelper.path
-        } else {
-            // Dev fallback: repository checkout + Homebrew interpreter.
-            // Documented in the README; the packaged app uses the bundle.
-            let repo = URL(fileURLWithPath: #filePath)
-                .deletingLastPathComponent()   // Sources
-                .deletingLastPathComponent()   // app
-                .deletingLastPathComponent()   // repo root
-            pythonPath = "/opt/homebrew/bin/python3.15"
-            helperScript = repo.appendingPathComponent("engine/helper.py").path
-        }
+        pythonPath = bundledPython.path
+        helperScript = bundledHelper.path
     }
 
     var isRunning: Bool {
@@ -108,6 +96,12 @@ final class HelperController {
 
     func start() {
         guard process == nil else { return }
+        guard FileManager.default.isExecutableFile(atPath: pythonPath),
+              FileManager.default.isReadableFile(atPath: helperScript) else {
+            log("Missing helper resources: \(pythonPath), \(helperScript). Run app/scripts/fetch-python.sh and rebuild the app.")
+            state = .exited(-1)
+            return
+        }
         state = .starting
         expectedExit = false
         progress = LiveProgress()

@@ -31,6 +31,26 @@ final class ReviewFixAPITests: XCTestCase {
 
     private static var python: String { ReviewFixTests.python }
 
+    func testMissingHelperResourcesFailExplicitly() {
+        let helper = HelperController(dataDir: tmp,
+            pythonPath: tmp.appendingPathComponent("missing-python").path,
+            helperScript: tmp.appendingPathComponent("missing-helper.py").path)
+        helper.start()
+        XCTAssertEqual(helper.state, .exited(-1))
+        XCTAssertTrue(helper.diagnostics.contains { $0.contains("Missing helper resources") })
+        XCTAssertFalse(helper.isRunning)
+    }
+
+    func testDefaultHelperUsesBundledRuntimeAndPings() async throws {
+        let helper = HelperController(dataDir: tmp)
+        let resources = try XCTUnwrap(Bundle.main.resourceURL)
+        XCTAssertEqual(helper.pythonPath, resources.appendingPathComponent("python/bin/python3.13").path)
+        XCTAssertEqual(helper.helperScript, resources.appendingPathComponent("engine/helper.py").path)
+        helper.start()
+        _ = try await helper.ping()
+        await helper.shutdown()
+    }
+
     // MARK: #4 benchmark lifecycle is app-scoped, not view-scoped
 
     func testCoordinatorOwnsRunAndDoesNotHijackNavigation() async throws {

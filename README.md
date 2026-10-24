@@ -1,9 +1,13 @@
 # DNSBench
 
-Local DNS resolver benchmark with a stdlib Python web interface and a native
-macOS app. The checked-in `engine/` is authoritative. No Hermes installation,
-pip packages, personal datasets, or Homebrew-specific Python path is needed
-for the web interface and offline smoke test.
+DNSBench is a DNS resolver benchmarking project with a working v1 Python
+measurement engine, a local web interface, and a native SwiftUI/AppKit macOS
+app. The [v2 design](https://github.com/archpc/dnsbench/tree/v2/docs) proposes a
+native Swift engine in a supervised worker and a standalone CLI sharing the
+same core; it is architecture and planning work, not an implemented replacement.
+The checked-in `engine/` remains authoritative for the current implementation.
+No Hermes installation, pip packages, personal datasets, or Homebrew-specific
+Python path is needed for the web interface and offline smoke test.
 
 ## Fresh-clone offline test
 
@@ -91,6 +95,43 @@ it in Hermes, retain a checkout and run commands from its root; no scripts are
 loaded from the installed skill directory. Native app builds require macOS and
 Xcode; the offline command above neither builds nor validates the native app.
 
+## Build the native macOS app
+
+The current app targets macOS 27.0+ and uses Xcode 27 (verified with Xcode
+27.1). The runtime bootstrap currently downloads an Apple Silicon (arm64)
+Python build; Intel Mac distribution is not provided by this script.
+
+From the repository root:
+
+    bash app/scripts/fetch-python.sh
+    xcodebuild -project app/DNSBench.xcodeproj -scheme DNSBench \
+      -configuration Debug -destination 'platform=macOS' \
+      -derivedDataPath app/build CODE_SIGNING_ALLOWED=NO test
+    open app/build/Build/Products/Debug/DNSBench.app
+
+If command-line tools are selected instead of Xcode, prefix xcodebuild with
+`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` (adjust to your
+installed Xcode). Use a normal build environment, not an OS sandbox around
+Xcode's build service. The commands build locally without distribution signing
+or notarization; they do not install the app into /Applications.
+
+The bootstrap downloads the pinned python-build-standalone runtime into
+`app/Resources/python/bin/python3.13`, verifies it can execute and import its
+standard library, and reuses a valid install on subsequent runs. Runtime files
+are gitignored. An incomplete existing runtime is preserved and rejected:
+move that directory aside before retrying. Older bootstrap versions could
+produce an extra `python/python/` directory level.
+
+The built app uses only its bundled Python and helper, never a hardcoded
+Homebrew interpreter or original source checkout. Missing resources produce an
+explicit diagnostic. Native tests include a real bundled-helper ping and
+synthetic run-store tests; legacy snapshots skip without real run history.
+The bootstrap's download needs Internet access; the native tests do not run
+public DNS measurements. The offline bootstrap regression uses a synthetic
+archive and a fake downloader:
+
+    python3 tests/test_native_bootstrap.py
+
 ## Other verification
 
     python3 tests/test_aggregate.py      # offline statistical regression tests
@@ -104,6 +145,21 @@ The following suites are NOT offline smoke tests:
 
 They exercise real benchmark jobs and require real datasets. The native suite
 is `cd app && xcodebuild -scheme DNSBench test`; snapshots require real runs.
+
+## Performance
+
+The web API originally rebuilt the visualization payload on every request:
+`points_payload()` reread the candidate list and JSONL checkpoints, then
+recomputed status, category, and latency for roughly 62,000 resolver candidates.
+Both `/api/points` and `/api/coverage` paid that cost even when the data had not
+changed. Caching the derived payload by each input file's identity (name,
+modification time, and size) removed repeated parsing and computation while
+invalidating the cache when a dataset changed. The recorded local measurements
+in [the fix commit](https://github.com/archpc/dnsbench/commit/92aae59e063d7b808ca0f3067757269b0a2af9e8)
+show `/api/points` falling from 376 ms to 10 ms and `/api/coverage` from 416 ms
+to 8 ms on warm requests. These are historical web API response times, not DNS
+query latencies or a guarantee for other machines; cold requests still build
+the payload. The cache now lives in `engine/adapter.py`.
 
 ## Measurement boundaries
 
